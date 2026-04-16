@@ -523,11 +523,29 @@ function CustomerDetail({ id, navigate }) {
 function VehiclesPage({ navigate }) {
     const [vehicles, setVehicles] = useState([]);
     const [search, setSearch] = useState('');
-    useEffect(() => { api('/vehicles' + (search ? `?search=${search}` : '')).then(setVehicles); }, [search]);
+    const [showForm, setShowForm] = useState(false);
+    const [customers, setCustomers] = useState([]);
+    const emptyVeh = {customer_id:'',vin:'',year:'',make:'',model:'',submodel:'',color:'',license_plate:'',license_state:'',mileage:'',notes:''};
+    const [form, setForm] = useState(emptyVeh);
+
+    const load = () => api('/vehicles' + (search ? `?search=${search}` : '')).then(setVehicles);
+    useEffect(() => { load(); }, [search]);
+    useEffect(() => { if (showForm) api('/customers').then(setCustomers); }, [showForm]);
+
+    const save = async () => {
+        const body = {...form};
+        if (body.year) body.year = parseInt(body.year);
+        if (body.mileage) body.mileage = parseInt(body.mileage);
+        await api('/vehicles', { method: 'POST', body });
+        setShowForm(false); setForm(emptyVeh); load();
+    };
 
     return (
         <div>
-            <div className="page-header"><h2>Vehicles</h2></div>
+            <div className="page-header">
+                <h2>Vehicles</h2>
+                <button className="btn btn-primary" onClick={() => setShowForm(true)}><i className="fas fa-plus"></i> New Vehicle</button>
+            </div>
             <div className="search-bar"><input placeholder="Search by VIN, make, model..." value={search} onChange={e => setSearch(e.target.value)} /></div>
             <div className="card"><div className="table-wrapper">
                 <table><thead><tr><th>Vehicle</th><th>VIN</th><th>Color</th><th>Owner</th><th>Mileage</th></tr></thead>
@@ -541,8 +559,30 @@ function VehiclesPage({ navigate }) {
                         <td>{v.mileage ? v.mileage.toLocaleString() : '—'}</td>
                     </tr>
                 ))}
+                {!vehicles.length && <tr><td colSpan="5" className="text-muted" style={{textAlign:'center',padding:32}}>No vehicles found</td></tr>}
                 </tbody></table>
             </div></div>
+            <Modal open={showForm} onClose={() => setShowForm(false)} title="New Vehicle">
+                <div className="form-grid">
+                    <div className="form-group"><label>Owner *</label>
+                        <select value={form.customer_id} onChange={e => setForm({...form, customer_id: e.target.value})}>
+                            <option value="">Select customer...</option>
+                            {customers.map(c => <option key={c.id} value={c.id}>{custName(c)}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group"><label>Year</label><input type="number" value={form.year} onChange={e => setForm({...form, year: e.target.value})} placeholder="2024" /></div>
+                    <div className="form-group"><label>Make</label><input value={form.make} onChange={e => setForm({...form, make: e.target.value})} placeholder="Peterbilt" /></div>
+                    <div className="form-group"><label>Model</label><input value={form.model} onChange={e => setForm({...form, model: e.target.value})} placeholder="389" /></div>
+                    <div className="form-group"><label>Submodel / Trim</label><input value={form.submodel} onChange={e => setForm({...form, submodel: e.target.value})} /></div>
+                    <div className="form-group"><label>VIN</label><input value={form.vin} onChange={e => setForm({...form, vin: e.target.value})} placeholder="17-digit VIN" /></div>
+                    <div className="form-group"><label>Color</label><input value={form.color} onChange={e => setForm({...form, color: e.target.value})} /></div>
+                    <div className="form-group"><label>License Plate</label><input value={form.license_plate} onChange={e => setForm({...form, license_plate: e.target.value})} /></div>
+                    <div className="form-group"><label>License State</label><input value={form.license_state} onChange={e => setForm({...form, license_state: e.target.value})} maxLength="2" placeholder="CA" /></div>
+                    <div className="form-group"><label>Mileage</label><input type="number" value={form.mileage} onChange={e => setForm({...form, mileage: e.target.value})} /></div>
+                </div>
+                <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} /></div>
+                <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={!form.customer_id}><i className="fas fa-save"></i> Save</button></div>
+            </Modal>
         </div>
     );
 }
@@ -1378,17 +1418,49 @@ function RODetail({ id, navigate }) {
 function InsurancePage({ navigate }) {
     const [companies, setCompanies] = useState([]);
     const [search, setSearch] = useState('');
-    useEffect(() => { api('/insurance' + (search ? `?search=${search}` : '')).then(setCompanies); }, [search]);
+    const [showForm, setShowForm] = useState(false);
+    const emptyIns = {company_name:'',contact_name:'',phone:'',email:'',fax:'',address:'',city:'',state:'',zip_code:'',policy_prefix:'',notes:''};
+    const [form, setForm] = useState(emptyIns);
+
+    const load = () => api('/insurance' + (search ? `?search=${search}` : '')).then(setCompanies);
+    useEffect(() => { load(); }, [search]);
+
+    const save = async () => {
+        await api('/insurance', { method: 'POST', body: form });
+        setShowForm(false); setForm(emptyIns); load();
+    };
+
     return (
         <div>
-            <div className="page-header"><h2>Insurance Companies</h2></div>
+            <div className="page-header">
+                <h2>Insurance Companies</h2>
+                <button className="btn btn-primary" onClick={() => setShowForm(true)}><i className="fas fa-plus"></i> New Insurance Co.</button>
+            </div>
             <div className="search-bar"><input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} /></div>
             <div className="card"><div className="table-wrapper">
-                <table><thead><tr><th>Company</th><th>Phone</th><th>Email</th><th>City</th></tr></thead>
+                <table><thead><tr><th>Company</th><th>Contact</th><th>Phone</th><th>Email</th><th>City</th></tr></thead>
                 <tbody>{companies.map(c => (
-                    <tr key={c.id}><td style={{fontWeight:500}}>{c.company_name}</td><td>{c.phone||'—'}</td><td>{c.email||'—'}</td><td>{c.city||'—'}</td></tr>
-                ))}</tbody></table>
+                    <tr key={c.id}><td style={{fontWeight:500}}>{c.company_name}</td><td>{c.contact_name||'—'}</td><td>{c.phone||'—'}</td><td>{c.email||'—'}</td><td>{c.city||'—'}</td></tr>
+                ))}
+                {!companies.length && <tr><td colSpan="5" className="text-muted" style={{textAlign:'center',padding:32}}>No insurance companies found</td></tr>}
+                </tbody></table>
             </div></div>
+            <Modal open={showForm} onClose={() => setShowForm(false)} title="New Insurance Company">
+                <div className="form-grid">
+                    <div className="form-group"><label>Company Name *</label><input value={form.company_name} onChange={e => setForm({...form, company_name: e.target.value})} /></div>
+                    <div className="form-group"><label>Contact Name</label><input value={form.contact_name} onChange={e => setForm({...form, contact_name: e.target.value})} /></div>
+                    <div className="form-group"><label>Phone</label><input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
+                    <div className="form-group"><label>Email</label><input value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
+                    <div className="form-group"><label>Fax</label><input value={form.fax} onChange={e => setForm({...form, fax: e.target.value})} /></div>
+                    <div className="form-group"><label>Policy Prefix</label><input value={form.policy_prefix} onChange={e => setForm({...form, policy_prefix: e.target.value})} placeholder="e.g. GEICO, SFARM" /></div>
+                    <div className="form-group"><label>Address</label><input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
+                    <div className="form-group"><label>City</label><input value={form.city} onChange={e => setForm({...form, city: e.target.value})} /></div>
+                    <div className="form-group"><label>State</label><input value={form.state} onChange={e => setForm({...form, state: e.target.value})} maxLength="2" /></div>
+                    <div className="form-group"><label>ZIP</label><input value={form.zip_code} onChange={e => setForm({...form, zip_code: e.target.value})} /></div>
+                </div>
+                <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} /></div>
+                <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={!form.company_name}><i className="fas fa-save"></i> Save</button></div>
+            </Modal>
         </div>
     );
 }
@@ -1398,10 +1470,28 @@ function InsurancePage({ navigate }) {
 // ═══════════════════════════════════════════════════════════
 function EmployeesPage({ navigate }) {
     const [employees, setEmployees] = useState([]);
-    useEffect(() => { api('/employees').then(setEmployees); }, []);
+    const [showForm, setShowForm] = useState(false);
+    const emptyEmp = {employee_code:'',first_name:'',last_name:'',role:'technician',email:'',phone:'',hourly_rate:'',flag_rate:'',hire_date:'',notes:''};
+    const [form, setForm] = useState(emptyEmp);
+
+    const load = () => api('/employees').then(setEmployees);
+    useEffect(() => { load(); }, []);
+
+    const save = async () => {
+        const body = {...form};
+        if (body.hourly_rate) body.hourly_rate = parseFloat(body.hourly_rate);
+        if (body.flag_rate) body.flag_rate = parseFloat(body.flag_rate);
+        if (!body.employee_code) body.employee_code = (body.first_name[0]||'')+(body.last_name||'').toUpperCase().slice(0,3)+(Math.floor(Math.random()*90)+10);
+        await api('/employees', { method: 'POST', body });
+        setShowForm(false); setForm(emptyEmp); load();
+    };
+
     return (
         <div>
-            <div className="page-header"><h2>Employees</h2></div>
+            <div className="page-header">
+                <h2>Employees</h2>
+                <button className="btn btn-primary" onClick={() => setShowForm(true)}><i className="fas fa-plus"></i> New Employee</button>
+            </div>
             <div className="card"><div className="table-wrapper">
                 <table><thead><tr><th>Code</th><th>Name</th><th>Role</th><th>Hourly Rate</th><th>Flag Rate</th><th>Status</th></tr></thead>
                 <tbody>{employees.map(e => (
@@ -1413,8 +1503,32 @@ function EmployeesPage({ navigate }) {
                         <td className="money">{e.flag_rate > 0 ? fmt(e.flag_rate) : '—'}</td>
                         <td>{e.is_active ? <span className="text-green">Active</span> : <span className="text-red">Inactive</span>}</td>
                     </tr>
-                ))}</tbody></table>
+                ))}
+                {!employees.length && <tr><td colSpan="6" className="text-muted" style={{textAlign:'center',padding:32}}>No employees found</td></tr>}
+                </tbody></table>
             </div></div>
+            <Modal open={showForm} onClose={() => setShowForm(false)} title="New Employee">
+                <div className="form-grid">
+                    <div className="form-group"><label>First Name *</label><input value={form.first_name} onChange={e => setForm({...form, first_name: e.target.value})} /></div>
+                    <div className="form-group"><label>Last Name *</label><input value={form.last_name} onChange={e => setForm({...form, last_name: e.target.value})} /></div>
+                    <div className="form-group"><label>Employee Code</label><input value={form.employee_code} onChange={e => setForm({...form, employee_code: e.target.value})} placeholder="Auto-generated if blank" /></div>
+                    <div className="form-group"><label>Role</label>
+                        <select value={form.role} onChange={e => setForm({...form, role: e.target.value})}>
+                            <option value="technician">Technician</option><option value="painter">Painter</option>
+                            <option value="estimator">Estimator</option><option value="detailer">Detailer</option>
+                            <option value="parts">Parts</option><option value="office">Office</option>
+                            <option value="manager">Manager</option><option value="admin">Admin</option>
+                        </select>
+                    </div>
+                    <div className="form-group"><label>Phone</label><input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
+                    <div className="form-group"><label>Email</label><input value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
+                    <div className="form-group"><label>Hourly Rate</label><input type="number" step="0.01" value={form.hourly_rate} onChange={e => setForm({...form, hourly_rate: e.target.value})} placeholder="0.00" /></div>
+                    <div className="form-group"><label>Flag Rate</label><input type="number" step="0.01" value={form.flag_rate} onChange={e => setForm({...form, flag_rate: e.target.value})} placeholder="0.00" /></div>
+                    <div className="form-group"><label>Hire Date</label><input type="date" value={form.hire_date} onChange={e => setForm({...form, hire_date: e.target.value})} /></div>
+                </div>
+                <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} /></div>
+                <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={!form.first_name||!form.last_name}><i className="fas fa-save"></i> Save</button></div>
+            </Modal>
         </div>
     );
 }
@@ -1425,17 +1539,56 @@ function EmployeesPage({ navigate }) {
 function VendorsPage({ navigate }) {
     const [vendors, setVendors] = useState([]);
     const [search, setSearch] = useState('');
-    useEffect(() => { api('/vendors' + (search ? `?search=${search}` : '')).then(setVendors); }, [search]);
+    const [showForm, setShowForm] = useState(false);
+    const emptyVnd = {vendor_name:'',vendor_type:'parts',contact_name:'',phone:'',email:'',fax:'',address:'',city:'',state:'',zip_code:'',account_number:'',notes:''};
+    const [form, setForm] = useState(emptyVnd);
+
+    const load = () => api('/vendors' + (search ? `?search=${search}` : '')).then(setVendors);
+    useEffect(() => { load(); }, [search]);
+
+    const save = async () => {
+        await api('/vendors', { method: 'POST', body: form });
+        setShowForm(false); setForm(emptyVnd); load();
+    };
+
     return (
         <div>
-            <div className="page-header"><h2>Vendors</h2></div>
+            <div className="page-header">
+                <h2>Vendors</h2>
+                <button className="btn btn-primary" onClick={() => setShowForm(true)}><i className="fas fa-plus"></i> New Vendor</button>
+            </div>
             <div className="search-bar"><input placeholder="Search vendors..." value={search} onChange={e => setSearch(e.target.value)} /></div>
             <div className="card"><div className="table-wrapper">
                 <table><thead><tr><th>Vendor</th><th>Type</th><th>Contact</th><th>Phone</th><th>City</th></tr></thead>
                 <tbody>{vendors.map(v => (
                     <tr key={v.id}><td style={{fontWeight:500}}>{v.vendor_name}</td><td><Badge status={v.vendor_type}/></td><td>{v.contact_name||'—'}</td><td>{v.phone||'—'}</td><td>{v.city||'—'}</td></tr>
-                ))}</tbody></table>
+                ))}
+                {!vendors.length && <tr><td colSpan="5" className="text-muted" style={{textAlign:'center',padding:32}}>No vendors found</td></tr>}
+                </tbody></table>
             </div></div>
+            <Modal open={showForm} onClose={() => setShowForm(false)} title="New Vendor">
+                <div className="form-grid">
+                    <div className="form-group"><label>Vendor Name *</label><input value={form.vendor_name} onChange={e => setForm({...form, vendor_name: e.target.value})} /></div>
+                    <div className="form-group"><label>Type</label>
+                        <select value={form.vendor_type} onChange={e => setForm({...form, vendor_type: e.target.value})}>
+                            <option value="parts">Parts</option><option value="paint">Paint</option>
+                            <option value="materials">Materials</option><option value="sublet">Sublet</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div className="form-group"><label>Contact Name</label><input value={form.contact_name} onChange={e => setForm({...form, contact_name: e.target.value})} /></div>
+                    <div className="form-group"><label>Phone</label><input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>
+                    <div className="form-group"><label>Email</label><input value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
+                    <div className="form-group"><label>Fax</label><input value={form.fax} onChange={e => setForm({...form, fax: e.target.value})} /></div>
+                    <div className="form-group"><label>Account #</label><input value={form.account_number} onChange={e => setForm({...form, account_number: e.target.value})} /></div>
+                    <div className="form-group"><label>Address</label><input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
+                    <div className="form-group"><label>City</label><input value={form.city} onChange={e => setForm({...form, city: e.target.value})} /></div>
+                    <div className="form-group"><label>State</label><input value={form.state} onChange={e => setForm({...form, state: e.target.value})} maxLength="2" /></div>
+                    <div className="form-group"><label>ZIP</label><input value={form.zip_code} onChange={e => setForm({...form, zip_code: e.target.value})} /></div>
+                </div>
+                <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} /></div>
+                <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={!form.vendor_name}><i className="fas fa-save"></i> Save</button></div>
+            </Modal>
         </div>
     );
 }
