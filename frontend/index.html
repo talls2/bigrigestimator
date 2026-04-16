@@ -1,0 +1,2316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WR Big Rig - Shop Manager</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #111318; --bg-card: #1a1d24; --bg-input: #22262e;
+            --border: #2e3340; --text: #e4e6eb; --text-muted: #8b8f9a;
+            --primary: #4db86a; --primary-hover: #3a9c54;
+            --green: #4db86a; --yellow: #eab308; --red: #ef4444; --orange: #f97316;
+            --purple: #a855f7;
+            --sidebar-w: 240px;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+        button { color: inherit; font-family: inherit; }
+
+        /* ─── Layout ─── */
+        .app { display: flex; min-height: 100vh; }
+        .sidebar { width: var(--sidebar-w); background: var(--bg-card); border-right: 1px solid var(--border); position: fixed; top: 0; left: 0; bottom: 0; overflow-y: auto; z-index: 100; }
+        .main { margin-left: var(--sidebar-w); flex: 1; padding: 24px; min-height: 100vh; }
+
+        /* ─── Sidebar ─── */
+        .sidebar-brand { padding: 20px 16px; border-bottom: 1px solid var(--border); }
+        .sidebar-brand h1 { font-size: 18px; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+        .sidebar-brand span { font-size: 11px; color: var(--text-muted); display: block; margin-top: 2px; }
+        .nav-section { padding: 12px 0; }
+        .nav-section-title { font-size: 10px; text-transform: uppercase; color: var(--text-muted); padding: 0 16px; margin-bottom: 4px; letter-spacing: 1px; }
+        .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; color: var(--text-muted); font-size: 14px; transition: all 0.15s; border-left: 3px solid transparent; }
+        .nav-item:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+        .nav-item.active { background: rgba(77,184,106,0.12); color: var(--primary); border-left-color: var(--primary); }
+        .nav-item i { width: 18px; text-align: center; font-size: 14px; }
+
+        /* ─── Common ─── */
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .page-header h2 { font-size: 24px; font-weight: 600; }
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-success { background: var(--green); color: white; }
+        .btn-danger { background: var(--red); color: white; }
+        .btn-warning { background: var(--yellow); color: #000; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+        .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .card-header h3 { font-size: 16px; font-weight: 600; }
+
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+        .stat-card .label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+        .stat-card .value.green { color: var(--green); }
+        .stat-card .value.blue { color: var(--primary); }
+        .stat-card .value.yellow { color: var(--yellow); }
+        .stat-card .value.red { color: var(--red); }
+
+        /* ─── Table ─── */
+        .table-wrapper { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--border); color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+        td { padding: 10px 12px; border-bottom: 1px solid rgba(71,85,105,0.3); vertical-align: middle; }
+        tr:hover td { background: rgba(77,184,106,0.05); }
+        .clickable { cursor: pointer; }
+
+        /* ─── Status Badges ─── */
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+        .badge-draft { background: rgba(148,163,184,0.2); color: var(--text-muted); }
+        .badge-pending { background: rgba(234,179,8,0.2); color: var(--yellow); }
+        .badge-approved { background: rgba(34,197,94,0.2); color: var(--green); }
+        .badge-rejected { background: rgba(239,68,68,0.2); color: var(--red); }
+        .badge-converted { background: rgba(168,85,247,0.2); color: var(--purple); }
+        .badge-open { background: rgba(77,184,106,0.2); color: var(--primary); }
+        .badge-in_progress, .badge-in-progress { background: rgba(249,115,22,0.2); color: var(--orange); }
+        .badge-on_hold, .badge-on-hold { background: rgba(234,179,8,0.2); color: var(--yellow); }
+        .badge-completed { background: rgba(34,197,94,0.2); color: var(--green); }
+        .badge-delivered { background: rgba(168,85,247,0.2); color: var(--purple); }
+        .badge-closed { background: rgba(148,163,184,0.2); color: var(--text-muted); }
+        .badge-rush { background: rgba(239,68,68,0.2); color: var(--red); }
+        .badge-high { background: rgba(249,115,22,0.2); color: var(--orange); }
+        .badge-normal { background: rgba(77,184,106,0.2); color: var(--primary); }
+        .badge-low { background: rgba(148,163,184,0.2); color: var(--text-muted); }
+
+        /* ─── Forms ─── */
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+        input, select, textarea { padding: 8px 12px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; outline: none; transition: border 0.15s; }
+        input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+        textarea { min-height: 80px; resize: vertical; font-family: inherit; }
+
+        .search-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+        .search-bar input { flex: 1; }
+
+        /* ─── Tabs ─── */
+        .tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 20px; }
+        .tab { padding: 10px 20px; cursor: pointer; color: var(--text-muted); font-size: 13px; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; }
+        .tab:hover { color: var(--text); }
+        .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+        /* ─── Detail View ─── */
+        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        .detail-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(71,85,105,0.2); }
+        .detail-label { color: var(--text-muted); font-size: 13px; }
+        .detail-value { font-size: 13px; font-weight: 500; }
+        .section-title { font-size: 14px; font-weight: 600; color: var(--primary); margin-bottom: 12px; margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+
+        /* ─── Modal ─── */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 200; }
+        .modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 24px; max-width: 700px; width: 95%; max-height: 85vh; overflow-y: auto; }
+        .modal h3 { margin-bottom: 16px; font-size: 18px; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+        /* ─── Responsive ─── */
+        @media (max-width: 768px) {
+            .sidebar { display: none; }
+            .main { margin-left: 0; }
+            .detail-grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+        }
+
+        /* ─── Utilities ─── */
+        .money { font-variant-numeric: tabular-nums; }
+        .text-green { color: var(--green); }
+        .text-red { color: var(--red); }
+        .text-muted { color: var(--text-muted); }
+        .text-sm { font-size: 12px; }
+        .mt-4 { margin-top: 16px; }
+        .mb-4 { margin-bottom: 16px; }
+        .flex { display: flex; }
+        .gap-2 { gap: 8px; }
+        .gap-4 { gap: 16px; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .flex-1 { flex: 1; }
+        .w-full { width: 100%; }
+        .empty-state { text-align: center; padding: 48px; color: var(--text-muted); }
+        .empty-state i { font-size: 48px; margin-bottom: 16px; display: block; }
+
+        /* ─── Login Screen ─── */
+        .login-container { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); }
+        .login-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 40px; width: 380px; text-align: center; }
+        .login-box h1 { font-size: 24px; color: var(--text); margin-bottom: 4px; }
+        .login-box .subtitle { color: var(--text-muted); font-size: 13px; margin-bottom: 28px; }
+        .login-box .form-group { margin-bottom: 16px; text-align: left; }
+        .login-box input { width: 100%; padding: 12px; font-size: 16px; }
+        .login-box .btn { width: 100%; padding: 12px; font-size: 15px; margin-top: 8px; justify-content: center; }
+        .login-error { color: var(--red); font-size: 13px; margin-top: 8px; }
+        .login-logo { font-size: 48px; color: var(--primary); margin-bottom: 16px; }
+
+        /* ─── Time Clock (Worker View) ─── */
+        .clock-display { font-size: 64px; font-weight: 700; color: var(--primary); font-variant-numeric: tabular-nums; margin: 16px 0; }
+        .clock-date { font-size: 16px; color: var(--text-muted); margin-bottom: 24px; }
+        .clock-status { padding: 20px; border-radius: 12px; margin-bottom: 24px; font-size: 22px; font-weight: 600; }
+        .clock-status.clocked-in { background: rgba(34,197,94,0.15); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+        .clock-status.clocked-out { background: rgba(148,163,184,0.15); color: var(--text-muted); border: 1px solid rgba(148,163,184,0.3); }
+        .clock-btn { padding: 28px 56px; font-size: 24px; border-radius: 16px; font-weight: 700; letter-spacing: 0.5px; min-width: 250px; }
+        .worker-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; background: var(--bg-card); border-bottom: 1px solid var(--border); }
+        .worker-header h1 { font-size: 18px; color: var(--primary); display: flex; align-items: center; gap: 8px; }
+        .worker-main { padding: 24px; max-width: 900px; margin: 0 auto; }
+        .worker-tabs { display: flex; gap: 0; background: var(--bg-card); border-bottom: 1px solid var(--border); padding: 0; }
+        .worker-tab { padding: 18px 28px; cursor: pointer; color: var(--text-muted); font-size: 16px; font-weight: 600; border-bottom: 3px solid transparent; transition: all 0.15s; flex: 1; text-align: center; -webkit-tap-highlight-color: transparent; }
+        .worker-tab:hover { color: var(--text); }
+        .worker-tab.active { color: var(--primary); border-bottom-color: var(--primary); background: rgba(255,255,255,0.03); }
+        .job-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+        .job-card .job-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .job-card .job-title { font-weight: 600; font-size: 18px; }
+        .job-card .job-detail { font-size: 15px; color: var(--text-muted); }
+
+        /* ─── Touch Login (TecStation) ─── */
+        .touch-login { min-height: 100vh; background: var(--bg); display: flex; flex-direction: column; align-items: center; padding: 32px 16px; }
+        .touch-login-logo { margin-bottom: 16px; }
+        .touch-login h2 { color: var(--primary); font-size: 20px; margin-bottom: 24px; }
+        .worker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; width: 100%; max-width: 700px; }
+        .worker-card { background: var(--bg-card); border: 2px solid var(--border); border-radius: 16px; padding: 24px 12px; text-align: center; cursor: pointer; transition: all 0.15s; -webkit-tap-highlight-color: transparent; user-select: none; color: var(--text); font-family: inherit; }
+        .worker-card:active { transform: scale(0.96); border-color: var(--primary); }
+        .worker-card:hover { border-color: var(--primary); background: rgba(255,255,255,0.05); }
+        .worker-card.selected { border-color: var(--primary); background: rgba(255,255,255,0.07); }
+        .worker-card .worker-avatar { width: 64px; height: 64px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; font-size: 24px; font-weight: 700; color: var(--primary); }
+        .worker-card .worker-label { font-size: 15px; font-weight: 600; color: var(--text); }
+
+        .pin-pad { display: grid; grid-template-columns: repeat(3, 80px); gap: 12px; justify-content: center; margin: 20px 0; }
+        .pin-key { width: 80px; height: 70px; border-radius: 12px; border: 2px solid var(--border); background: var(--bg-card); color: #fff; font-size: 28px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.1s; -webkit-tap-highlight-color: transparent; user-select: none; font-family: inherit; }
+        .pin-key:active { background: var(--primary); color: white; transform: scale(0.95); }
+        .pin-dots { display: flex; gap: 12px; justify-content: center; margin: 16px 0; }
+        .pin-dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); background: transparent; }
+        .pin-dot.filled { background: var(--primary); border-color: var(--primary); }
+
+        /* ─── Touch-friendly buttons ─── */
+        .touch-btn { padding: 18px 24px; font-size: 20px; border-radius: 12px; font-weight: 700; min-height: 56px; -webkit-tap-highlight-color: transparent; user-select: none; cursor: pointer; border: none; display: inline-flex; align-items: center; justify-content: center; gap: 10px; color: var(--text); font-family: inherit; }
+        .touch-btn:active { transform: scale(0.97); }
+        .touch-btn-primary { background: var(--primary); color: white; }
+        .touch-btn-primary:hover { background: #3da85a; }
+        .touch-btn-success { background: #22c55e; color: white; font-size: 28px; padding: 24px 48px; }
+        .touch-btn-success:hover { background: #16a34a; }
+        .touch-btn-danger { background: var(--red); color: white; font-size: 28px; padding: 24px 48px; }
+        .touch-btn-danger:hover { background: #b91c1c; }
+        .pin-key-back { background: var(--bg); color: var(--text-muted); font-size: 22px; font-family: inherit; }
+        .touch-move-btn { padding: 14px 20px; font-size: 15px; border-radius: 10px; font-weight: 600; min-height: 48px; -webkit-tap-highlight-color: transparent; user-select: none; cursor: pointer; text-align: center; background: transparent; border: 2px solid var(--border); display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--text); font-family: inherit; }
+        .touch-move-btn:active { transform: scale(0.96); }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .picker-row:hover { background: rgba(255,255,255,0.06) !important; }
+    </style>
+</head>
+<body>
+<div id="root"></div>
+<script src="/parts-catalog.js"></script>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+// ═══════════════════════════════════════════════════════════
+// API CLIENT
+// ═══════════════════════════════════════════════════════════
+const API = window.location.origin + '/api';
+
+// Auth token stored in memory
+let _authToken = localStorage.getItem('shop_token') || null;
+
+function setAuthToken(token) {
+    _authToken = token;
+    if (token) localStorage.setItem('shop_token', token);
+    else localStorage.removeItem('shop_token');
+}
+
+async function api(path, opts = {}) {
+    const url = API + path;
+    const headers = { 'Content-Type': 'application/json' };
+    if (_authToken) headers['Authorization'] = `Bearer ${_authToken}`;
+    const config = { headers, ...opts };
+    if (config.body && typeof config.body === 'object') config.body = JSON.stringify(config.body);
+    const res = await fetch(url, config);
+    if (res.status === 401) {
+        setAuthToken(null);
+        window.dispatchEvent(new Event('auth-expired'));
+        throw new Error('Session expired');
+    }
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `API error ${res.status}`);
+    }
+    return res.json();
+}
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+const fmt = (n) => n != null ? `$${Number(n).toLocaleString('en-US', {minimumFractionDigits: 2})}` : '—';
+const fmtDate = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString() : '—';
+const custName = (r) => r.company_name || [r.first_name, r.last_name].filter(Boolean).join(' ') || '—';
+const vehDesc = (r) => [r.vehicle_year||r.year, r.vehicle_make||r.make, r.vehicle_model||r.model].filter(Boolean).join(' ') || '—';
+
+function Badge({ status }) {
+    const cls = `badge badge-${(status||'').replace(/_/g,'-')}`;
+    return <span className={cls}>{(status||'').replace(/_/g,' ')}</span>;
+}
+
+function Modal({ open, onClose, title, children }) {
+    if (!open) return null;
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-4">
+                    <h3>{title}</h3>
+                    <button className="btn btn-outline btn-sm" onClick={onClose}><i className="fas fa-times"></i></button>
+                </div>
+                {children}
+            </div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// SIDEBAR
+// ═══════════════════════════════════════════════════════════
+function Sidebar({ page, setPage, user, onLogout }) {
+    const nav = [
+        { section: 'Overview', items: [
+            { id: 'dashboard', icon: 'fa-chart-line', label: 'Dashboard' },
+        ]},
+        { section: 'Operations', items: [
+            { id: 'estimates', icon: 'fa-file-invoice-dollar', label: 'Estimates' },
+            { id: 'repair-orders', icon: 'fa-wrench', label: 'Repair Orders' },
+            { id: 'production', icon: 'fa-industry', label: 'Production' },
+        ]},
+        { section: 'People & Contacts', items: [
+            { id: 'customers', icon: 'fa-users', label: 'Customers' },
+            { id: 'vehicles', icon: 'fa-car', label: 'Vehicles' },
+            { id: 'insurance', icon: 'fa-shield-halved', label: 'Insurance' },
+            { id: 'employees', icon: 'fa-id-badge', label: 'Employees' },
+            { id: 'vendors', icon: 'fa-truck', label: 'Vendors' },
+        ]},
+        { section: 'Financial', items: [
+            { id: 'reports', icon: 'fa-chart-bar', label: 'Reports' },
+        ]},
+        { section: 'Settings', items: [
+            { id: 'settings', icon: 'fa-gear', label: 'Shop Settings' },
+        ]},
+    ];
+
+    return (
+        <div className="sidebar">
+            <div className="sidebar-brand">
+                <h1><img src="/logo.png" alt="WR Big Rig" style={{height: 36}} /></h1>
+            </div>
+            {nav.map(s => (
+                <div className="nav-section" key={s.section}>
+                    <div className="nav-section-title">{s.section}</div>
+                    {s.items.map(i => (
+                        <div key={i.id} className={`nav-item ${page === i.id ? 'active' : ''}`}
+                             onClick={() => setPage(i.id)}>
+                            <i className={`fas ${i.icon}`}></i> {i.label}
+                        </div>
+                    ))}
+                </div>
+            ))}
+            {user && (
+                <div style={{position: 'absolute', bottom: 0, left: 0, right: 0, padding: '12px 16px', borderTop: '1px solid var(--border)', background: 'var(--bg-card)'}}>
+                    <div style={{fontSize: 12, color: 'var(--text-muted)', marginBottom: 4}}>
+                        <i className="fas fa-user"></i> {user.display_name}
+                    </div>
+                    <div style={{fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase'}}>{user.role}</div>
+                    <button className="btn btn-outline btn-sm w-full" onClick={onLogout} style={{justifyContent: 'center'}}>
+                        <i className="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════
+function Dashboard({ navigate }) {
+    const [data, setData] = useState(null);
+    useEffect(() => { api('/dashboard').then(setData).catch(console.error); }, []);
+    if (!data) return <div className="empty-state"><i className="fas fa-spinner fa-spin"></i>Loading...</div>;
+
+    return (
+        <div>
+            <div className="page-header"><h2>Dashboard</h2></div>
+            <div className="stats-grid">
+                <div className="stat-card"><div className="label">Open Repair Orders</div><div className="value blue">{data.open_ros}</div></div>
+                <div className="stat-card"><div className="label">Pending Estimates</div><div className="value yellow">{data.pending_estimates}</div></div>
+                <div className="stat-card"><div className="label">Total Revenue</div><div className="value green money">{fmt(data.total_revenue)}</div></div>
+                <div className="stat-card"><div className="label">Outstanding Balance</div><div className="value red money">{fmt(data.outstanding_balance)}</div></div>
+                <div className="stat-card"><div className="label">Customers</div><div className="value">{data.total_customers}</div></div>
+                <div className="stat-card"><div className="label">Vehicles</div><div className="value">{data.total_vehicles}</div></div>
+            </div>
+
+            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:16}}>
+                <div className="card">
+                    <div className="card-header"><h3>Recent Repair Orders</h3></div>
+                    <div className="table-wrapper">
+                        <table><thead><tr><th>RO #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Total</th></tr></thead>
+                        <tbody>
+                        {(data.recent_ros||[]).map(r => (
+                            <tr key={r.id} className="clickable" onClick={() => navigate('ro-detail', r.id)}>
+                                <td style={{color:'var(--primary)', fontWeight:600}}>{r.ro_number}</td>
+                                <td>{custName(r)}</td>
+                                <td>{vehDesc(r)}</td>
+                                <td><Badge status={r.status} /></td>
+                                <td className="money">{fmt(r.total_amount)}</td>
+                            </tr>
+                        ))}
+                        </tbody></table>
+                    </div>
+                </div>
+                <div className="card">
+                    <div className="card-header"><h3>Recent Estimates</h3></div>
+                    <div className="table-wrapper">
+                        <table><thead><tr><th>Est #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Total</th></tr></thead>
+                        <tbody>
+                        {(data.recent_estimates||[]).map(e => (
+                            <tr key={e.id} className="clickable" onClick={() => navigate('est-detail', e.id)}>
+                                <td style={{color:'var(--primary)', fontWeight:600}}>{e.estimate_number}</td>
+                                <td>{custName(e)}</td>
+                                <td>{vehDesc(e)}</td>
+                                <td><Badge status={e.status} /></td>
+                                <td className="money">{fmt(e.total_amount)}</td>
+                            </tr>
+                        ))}
+                        </tbody></table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// CUSTOMERS
+// ═══════════════════════════════════════════════════════════
+function CustomersPage({ navigate }) {
+    const [customers, setCustomers] = useState([]);
+    const [search, setSearch] = useState('');
+    const [showForm, setShowForm] = useState(false);
+    const [form, setForm] = useState({customer_type:'individual',first_name:'',last_name:'',company_name:'',phone_home:'',email:'',address:'',city:'',state:'',zip_code:''});
+
+    const load = () => api('/customers' + (search ? `?search=${search}` : '')).then(setCustomers);
+    useEffect(() => { load(); }, [search]);
+
+    const save = async () => {
+        await api('/customers', { method: 'POST', body: form });
+        setShowForm(false);
+        setForm({customer_type:'individual',first_name:'',last_name:'',company_name:'',phone_home:'',email:'',address:'',city:'',state:'',zip_code:''});
+        load();
+    };
+
+    return (
+        <div>
+            <div className="page-header">
+                <h2>Customers</h2>
+                <button className="btn btn-primary" onClick={() => setShowForm(true)}><i className="fas fa-plus"></i> New Customer</button>
+            </div>
+            <div className="search-bar">
+                <input placeholder="Search customers..." value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+            <div className="card">
+                <div className="table-wrapper">
+                    <table><thead><tr><th>Name</th><th>Type</th><th>Phone</th><th>Email</th><th>City</th></tr></thead>
+                    <tbody>
+                    {customers.map(c => (
+                        <tr key={c.id} className="clickable" onClick={() => navigate('customer-detail', c.id)}>
+                            <td style={{fontWeight:500}}>{custName(c)}</td>
+                            <td><Badge status={c.customer_type} /></td>
+                            <td>{c.phone_home || '—'}</td>
+                            <td>{c.email || '—'}</td>
+                            <td>{c.city || '—'}</td>
+                        </tr>
+                    ))}
+                    {!customers.length && <tr><td colSpan="5" className="text-muted" style={{textAlign:'center',padding:32}}>No customers found</td></tr>}
+                    </tbody></table>
+                </div>
+            </div>
+            <Modal open={showForm} onClose={() => setShowForm(false)} title="New Customer">
+                <div className="form-grid">
+                    <div className="form-group"><label>Type</label>
+                        <select value={form.customer_type} onChange={e => setForm({...form, customer_type: e.target.value})}>
+                            <option value="individual">Individual</option><option value="company">Company</option>
+                        </select>
+                    </div>
+                    {form.customer_type === 'individual' ? <>
+                        <div className="form-group"><label>First Name</label><input value={form.first_name} onChange={e => setForm({...form, first_name: e.target.value})} /></div>
+                        <div className="form-group"><label>Last Name</label><input value={form.last_name} onChange={e => setForm({...form, last_name: e.target.value})} /></div>
+                    </> :
+                        <div className="form-group"><label>Company Name</label><input value={form.company_name} onChange={e => setForm({...form, company_name: e.target.value})} /></div>
+                    }
+                    <div className="form-group"><label>Phone</label><input value={form.phone_home} onChange={e => setForm({...form, phone_home: e.target.value})} /></div>
+                    <div className="form-group"><label>Email</label><input value={form.email} onChange={e => setForm({...form, email: e.target.value})} /></div>
+                    <div className="form-group"><label>Address</label><input value={form.address} onChange={e => setForm({...form, address: e.target.value})} /></div>
+                    <div className="form-group"><label>City</label><input value={form.city} onChange={e => setForm({...form, city: e.target.value})} /></div>
+                    <div className="form-group"><label>State</label><input value={form.state} onChange={e => setForm({...form, state: e.target.value})} /></div>
+                    <div className="form-group"><label>ZIP</label><input value={form.zip_code} onChange={e => setForm({...form, zip_code: e.target.value})} /></div>
+                </div>
+                <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button><button className="btn btn-primary" onClick={save}><i className="fas fa-save"></i> Save</button></div>
+            </Modal>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// CUSTOMER DETAIL
+// ═══════════════════════════════════════════════════════════
+function CustomerDetail({ id, navigate }) {
+    const [c, setC] = useState(null);
+    useEffect(() => { api(`/customers/${id}`).then(setC); }, [id]);
+    if (!c) return <div className="empty-state"><i className="fas fa-spinner fa-spin"></i></div>;
+
+    return (
+        <div>
+            <div className="page-header">
+                <div className="flex items-center gap-2">
+                    <button className="btn btn-outline btn-sm" onClick={() => navigate('customers')}><i className="fas fa-arrow-left"></i></button>
+                    <h2>{custName(c)}</h2>
+                </div>
+            </div>
+            <div className="detail-grid">
+                <div className="card">
+                    <div className="section-title"><i className="fas fa-user"></i> Contact Info</div>
+                    <div className="detail-row"><span className="detail-label">Type</span><span className="detail-value">{c.customer_type}</span></div>
+                    <div className="detail-row"><span className="detail-label">Phone</span><span className="detail-value">{c.phone_home||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Email</span><span className="detail-value">{c.email||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Address</span><span className="detail-value">{[c.address,c.city,c.state,c.zip_code].filter(Boolean).join(', ')||'—'}</span></div>
+                </div>
+                <div className="card">
+                    <div className="section-title"><i className="fas fa-car"></i> Vehicles ({(c.vehicles||[]).length})</div>
+                    {(c.vehicles||[]).map(v => (
+                        <div key={v.id} className="detail-row clickable" onClick={() => navigate('vehicle-detail', v.id)}>
+                            <span className="detail-value">{v.year} {v.make} {v.model}</span>
+                            <span className="text-muted text-sm">{v.vin}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="card mt-4">
+                <div className="section-title"><i className="fas fa-wrench"></i> Repair Orders</div>
+                <table><thead><tr><th>RO #</th><th>Status</th><th>Total</th><th>Created</th></tr></thead>
+                <tbody>
+                {(c.repair_orders||[]).map(r => (
+                    <tr key={r.id} className="clickable" onClick={() => navigate('ro-detail', r.id)}>
+                        <td style={{color:'var(--primary)'}}>{r.ro_number}</td><td><Badge status={r.status}/></td>
+                        <td className="money">{fmt(r.total_amount)}</td><td>{fmtDate(r.create_date)}</td>
+                    </tr>
+                ))}
+                </tbody></table>
+            </div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// VEHICLES
+// ═══════════════════════════════════════════════════════════
+function VehiclesPage({ navigate }) {
+    const [vehicles, setVehicles] = useState([]);
+    const [search, setSearch] = useState('');
+    useEffect(() => { api('/vehicles' + (search ? `?search=${search}` : '')).then(setVehicles); }, [search]);
+
+    return (
+        <div>
+            <div className="page-header"><h2>Vehicles</h2></div>
+            <div className="search-bar"><input placeholder="Search by VIN, make, model..." value={search} onChange={e => setSearch(e.target.value)} /></div>
+            <div className="card"><div className="table-wrapper">
+                <table><thead><tr><th>Vehicle</th><th>VIN</th><th>Color</th><th>Owner</th><th>Mileage</th></tr></thead>
+                <tbody>
+                {vehicles.map(v => (
+                    <tr key={v.id} className="clickable" onClick={() => navigate('vehicle-detail', v.id)}>
+                        <td style={{fontWeight:500}}>{vehDesc(v)}</td>
+                        <td className="text-sm">{v.vin||'—'}</td>
+                        <td>{v.color||'—'}</td>
+                        <td>{custName(v)}</td>
+                        <td>{v.mileage ? v.mileage.toLocaleString() : '—'}</td>
+                    </tr>
+                ))}
+                </tbody></table>
+            </div></div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// ESTIMATES LIST
+// ═══════════════════════════════════════════════════════════
+function EstimatesPage({ navigate }) {
+    const [estimates, setEstimates] = useState([]);
+    const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+
+    useEffect(() => {
+        let q = '/estimates?';
+        if (search) q += `search=${search}&`;
+        if (statusFilter) q += `status=${statusFilter}`;
+        api(q).then(setEstimates);
+    }, [search, statusFilter]);
+
+    return (
+        <div>
+            <div className="page-header">
+                <h2>Estimates</h2>
+                <button className="btn btn-primary" onClick={() => navigate('est-new')}><i className="fas fa-plus"></i> New Estimate</button>
+            </div>
+            <div className="search-bar">
+                <input placeholder="Search estimates..." value={search} onChange={e => setSearch(e.target.value)} />
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{width:160}}>
+                    <option value="">All Statuses</option>
+                    <option value="draft">Draft</option><option value="pending">Pending</option>
+                    <option value="approved">Approved</option><option value="converted">Converted</option>
+                </select>
+            </div>
+            <div className="card"><div className="table-wrapper">
+                <table><thead><tr><th>Estimate #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Loss Date</th><th>Total</th></tr></thead>
+                <tbody>
+                {estimates.map(e => (
+                    <tr key={e.id} className="clickable" onClick={() => navigate('est-detail', e.id)}>
+                        <td style={{color:'var(--primary)', fontWeight:600}}>{e.estimate_number}</td>
+                        <td>{custName(e)}</td>
+                        <td>{vehDesc(e)}</td>
+                        <td><Badge status={e.status} /></td>
+                        <td>{fmtDate(e.loss_date)}</td>
+                        <td className="money">{fmt(e.total_amount)}</td>
+                    </tr>
+                ))}
+                </tbody></table>
+            </div></div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// NEW ESTIMATE FORM
+// ═══════════════════════════════════════════════════════════
+function NewEstimate({ navigate }) {
+    const [customers, setCustomers] = useState([]);
+    const [vehicles, setVehicles] = useState([]);
+    const [insurance, setInsurance] = useState([]);
+    const [employees, setEmployees] = useState([]);
+    const [form, setForm] = useState({
+        customer_id: '', vehicle_id: '', insurance_company_id: '', estimator_id: '',
+        claim_number: '', policy_number: '', deductible: '', loss_date: '',
+        point_of_impact: '', damage_description: '', notes: '', status: 'pending'
+    });
+    const [isInsurance, setIsInsurance] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        api('/customers').then(setCustomers).catch(() => {});
+        api('/insurance-companies').then(setInsurance).catch(() => {});
+        api('/employees').then(setEmployees).catch(() => {});
+    }, []);
+
+    // Load vehicles when customer changes
+    useEffect(() => {
+        if (form.customer_id) {
+            api('/vehicles?customer_id=' + form.customer_id).then(setVehicles).catch(() => setVehicles([]));
+        } else {
+            setVehicles([]);
+        }
+    }, [form.customer_id]);
+
+    const set = (field, val) => setForm(prev => ({...prev, [field]: val}));
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!form.customer_id) { setError('Please select a customer'); return; }
+        setError('');
+        setSaving(true);
+        try {
+            const body = {
+                customer_id: parseInt(form.customer_id),
+                vehicle_id: form.vehicle_id ? parseInt(form.vehicle_id) : null,
+                insurance_company_id: form.insurance_company_id ? parseInt(form.insurance_company_id) : null,
+                estimator_id: form.estimator_id ? parseInt(form.estimator_id) : null,
+                claim_number: form.claim_number || null,
+                policy_number: form.policy_number || null,
+                deductible: form.deductible ? parseFloat(form.deductible) : 0,
+                loss_date: form.loss_date || null,
+                point_of_impact: form.point_of_impact || null,
+                damage_description: form.damage_description || null,
+                notes: form.notes || null,
+                status: form.status,
+            };
+            const result = await api('/estimates', { method: 'POST', body });
+            navigate('est-detail', result.id);
+        } catch (err) {
+            setError(err.message || 'Failed to create estimate');
+        }
+        setSaving(false);
+    };
+
+    return (
+        <div>
+            <div className="page-header">
+                <div className="flex items-center gap-2">
+                    <button className="btn btn-outline btn-sm" onClick={() => navigate('estimates')}><i className="fas fa-arrow-left"></i></button>
+                    <h2>New Estimate</h2>
+                </div>
+            </div>
+
+            <form onSubmit={handleSubmit}>
+                <div className="detail-grid">
+                    <div className="card">
+                        <div className="section-title"><i className="fas fa-user"></i> Customer & Vehicle</div>
+                        <div className="form-group">
+                            <label>Customer *</label>
+                            <select value={form.customer_id} onChange={e => set('customer_id', e.target.value)} required>
+                                <option value="">Select Customer...</option>
+                                {customers.map(c => <option key={c.id} value={c.id}>{custName(c)}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Vehicle</label>
+                            <select value={form.vehicle_id} onChange={e => set('vehicle_id', e.target.value)}>
+                                <option value="">Select Vehicle...</option>
+                                {vehicles.map(v => <option key={v.id} value={v.id}>{vehDesc(v)}</option>)}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label>Estimator</label>
+                            <select value={form.estimator_id} onChange={e => set('estimator_id', e.target.value)}>
+                                <option value="">Select Estimator...</option>
+                                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="card">
+                        <label style={{display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '4px 0'}}>
+                            <input type="checkbox" checked={isInsurance} onChange={e => setIsInsurance(e.target.checked)}
+                                   style={{width: 18, height: 18, accentColor: 'var(--primary)'}} />
+                            <span style={{fontSize: 15, fontWeight: 600}}><i className="fas fa-shield-halved" style={{marginRight: 6}}></i> Insurance Job</span>
+                        </label>
+                        {isInsurance && <>
+                            <div className="form-group" style={{marginTop: 12}}>
+                                <label>Insurance Company</label>
+                                <select value={form.insurance_company_id} onChange={e => set('insurance_company_id', e.target.value)}>
+                                    <option value="">Select Insurance...</option>
+                                    {insurance.map(i => <option key={i.id} value={i.id}>{i.company_name}</option>)}
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label>Claim Number</label>
+                                <input value={form.claim_number} onChange={e => set('claim_number', e.target.value)} placeholder="Claim #" />
+                            </div>
+                            <div className="form-group">
+                                <label>Policy Number</label>
+                                <input value={form.policy_number} onChange={e => set('policy_number', e.target.value)} placeholder="Policy #" />
+                            </div>
+                            <div className="form-group">
+                                <label>Deductible</label>
+                                <input type="number" step="0.01" value={form.deductible} onChange={e => set('deductible', e.target.value)} placeholder="0.00" />
+                            </div>
+                        </>}
+                    </div>
+                </div>
+
+                <div className="card mt-4">
+                    <div className="section-title"><i className="fas fa-clipboard"></i> Job Details</div>
+                    <div className="detail-grid">
+                        {isInsurance && <div className="form-group">
+                            <label>Loss Date</label>
+                            <input type="date" value={form.loss_date} onChange={e => set('loss_date', e.target.value)} />
+                        </div>}
+                        <div className="form-group">
+                            <label>Area</label>
+                            <input value={form.point_of_impact} onChange={e => set('point_of_impact', e.target.value)} placeholder="e.g. Full body, Hood & fenders, Left side..." />
+                        </div>
+                    </div>
+                    <div className="form-group">
+                        <label>Job Description</label>
+                        <textarea rows={3} value={form.damage_description} onChange={e => set('damage_description', e.target.value)}
+                                  placeholder="e.g. Full repaint, rust repair and refinish, collision damage, color change..." style={{width:'100%', padding:10, background:'var(--bg-input)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text)', resize:'vertical'}}></textarea>
+                    </div>
+                    <div className="form-group">
+                        <label>Notes</label>
+                        <textarea rows={2} value={form.notes} onChange={e => set('notes', e.target.value)}
+                                  placeholder="Internal notes..." style={{width:'100%', padding:10, background:'var(--bg-input)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text)', resize:'vertical'}}></textarea>
+                    </div>
+                </div>
+
+                {error && <div style={{color: 'var(--red)', marginTop: 12, fontWeight: 600}}><i className="fas fa-exclamation-circle"></i> {error}</div>}
+
+                <div style={{marginTop: 16, display: 'flex', gap: 12}}>
+                    <button type="submit" className="btn btn-primary" disabled={saving}>
+                        {saving ? <><i className="fas fa-spinner fa-spin"></i> Creating...</> : <><i className="fas fa-save"></i> Create Estimate</>}
+                    </button>
+                    <button type="button" className="btn btn-outline" onClick={() => navigate('estimates')}>Cancel</button>
+                </div>
+            </form>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// PANEL / PART PICKER (searchable catalog from Mitchell data)
+// ═══════════════════════════════════════════════════════════
+function PanelPicker({ onSelect }) {
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState('');
+    const [activeCat, setActiveCat] = useState('All');
+
+    const catalog = typeof PARTS_CATALOG !== 'undefined' ? PARTS_CATALOG : [];
+    const cats = ['All', ...Array.from(new Set(catalog.map(p => p.cat)))];
+
+    const filtered = catalog.filter(p => {
+        const matchCat = activeCat === 'All' || p.cat === activeCat;
+        const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
+        return matchCat && matchSearch;
+    });
+
+    const handleSelect = (item) => {
+        onSelect(item);
+        setOpen(false);
+        setSearch('');
+    };
+
+    if (!open) {
+        return (
+            <div style={{marginBottom: 12}}>
+                <button className="btn btn-outline" onClick={() => setOpen(true)} style={{width: '100%', justifyContent: 'center', padding: '10px 16px'}}>
+                    <i className="fas fa-search"></i> Pick Panel / Part from Catalog
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div style={{marginBottom: 12, border: '1px solid var(--primary)', borderRadius: 8, overflow: 'hidden'}}>
+            {/* Search bar */}
+            <div style={{padding: '10px 12px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', display: 'flex', gap: 8, alignItems: 'center'}}>
+                <i className="fas fa-search" style={{color: 'var(--text-muted)'}}></i>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search panels & parts..."
+                       autoFocus style={{flex: 1, background: 'var(--bg-input)', border: '1px solid var(--border)', borderRadius: 6, padding: '8px 10px', color: 'var(--text)'}} />
+                <button className="btn btn-outline btn-sm" onClick={() => { setOpen(false); setSearch(''); }}>
+                    <i className="fas fa-times"></i>
+                </button>
+            </div>
+
+            {/* Category tabs */}
+            <div style={{display: 'flex', gap: 0, overflowX: 'auto', background: 'var(--bg-card)', borderBottom: '1px solid var(--border)', padding: '0 4px'}}>
+                {cats.map(c => (
+                    <button key={c} onClick={() => setActiveCat(c)}
+                        style={{padding: '8px 14px', fontSize: 12, fontWeight: activeCat === c ? 700 : 400, whiteSpace: 'nowrap',
+                            background: 'transparent', border: 'none', borderBottom: activeCat === c ? '2px solid var(--primary)' : '2px solid transparent',
+                            color: activeCat === c ? 'var(--primary)' : 'var(--text-muted)', cursor: 'pointer'}}>
+                        {c}
+                    </button>
+                ))}
+            </div>
+
+            {/* Results */}
+            <div style={{maxHeight: 280, overflowY: 'auto', padding: 4}}>
+                {filtered.length === 0 && <div style={{padding: 20, textAlign: 'center', color: 'var(--text-muted)'}}>No parts found</div>}
+                {filtered.map((p, i) => (
+                    <div key={i} className="picker-row" onClick={() => handleSelect(p)}
+                         style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', cursor: 'pointer',
+                             borderRadius: 6, fontSize: 13, borderBottom: '1px solid var(--border)'}}>
+                        <div>
+                            <span style={{fontWeight: 600, color: 'var(--text)'}}>{p.name}</span>
+                            <span style={{marginLeft: 8, fontSize: 11, color: 'var(--text-muted)'}}>{p.cat}</span>
+                        </div>
+                        <span className="badge" style={{fontSize: 11, padding: '2px 8px',
+                            background: p.op === 'refinish' ? 'rgba(234,179,8,0.15)' : p.op === 'replace' ? 'rgba(59,130,246,0.15)' : 'rgba(168,85,247,0.15)',
+                            color: p.op === 'refinish' ? '#eab308' : p.op === 'replace' ? '#3b82f6' : '#a855f7'}}>
+                            {p.op}
+                        </span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// ESTIMATE DETAIL (with add/delete line items)
+// ═══════════════════════════════════════════════════════════
+function EstimateDetail({ id, navigate }) {
+    const [est, setEst] = useState(null);
+    const [showAddLine, setShowAddLine] = useState(false);
+    const [rates, setRates] = useState([]);
+    const [lineForm, setLineForm] = useState({ line_type: 'labor', operation: '', description: '', part_number: '', part_type: 'OEM',
+        quantity: 1, labor_hours: 0, labor_rate: 0, paint_hours: 0, paint_rate: 0, part_price: 0, part_cost: 0, notes: '' });
+    const [lineSaving, setLineSaving] = useState(false);
+
+    const load = () => api(`/estimates/${id}`).then(setEst);
+    useEffect(() => { load(); }, [id]);
+    useEffect(() => { api('/shop/rates').then(setRates).catch(() => {}); }, []);
+
+    // Auto-fill rate when type changes
+    const setLineField = (field, val) => {
+        setLineForm(prev => {
+            const next = {...prev, [field]: val};
+            if (field === 'line_type') {
+                const findRate = (keyword) => { const r = rates.find(r => r.rate_type.includes(keyword)); return r ? r.rate_amount : 0; };
+                if (val === 'labor') { next.labor_rate = findRate('body_labor') || findRate('labor'); next.paint_rate = 0; next.paint_hours = 0; next.part_price = 0; next.part_cost = 0; next.part_number = ''; }
+                else if (val === 'paint' || val === 'refinish') { next.paint_rate = findRate('paint') || findRate('refinish'); next.labor_rate = 0; next.labor_hours = 0; next.part_price = 0; next.part_cost = 0; next.part_number = ''; }
+                else if (val === 'part') { next.labor_hours = 0; next.labor_rate = 0; next.paint_hours = 0; next.paint_rate = 0; }
+                else { next.labor_hours = 0; next.labor_rate = 0; next.paint_hours = 0; next.paint_rate = 0; next.part_number = ''; }
+            }
+            return next;
+        });
+    };
+
+    const addLine = async () => {
+        if (!lineForm.description) return;
+        setLineSaving(true);
+        try {
+            const body = {
+                line_type: lineForm.line_type,
+                operation: lineForm.operation || null,
+                description: lineForm.description,
+                part_number: lineForm.part_number || null,
+                part_type: lineForm.line_type === 'part' ? lineForm.part_type : null,
+                quantity: parseFloat(lineForm.quantity) || 1,
+                labor_hours: parseFloat(lineForm.labor_hours) || 0,
+                labor_rate: parseFloat(lineForm.labor_rate) || 0,
+                paint_hours: parseFloat(lineForm.paint_hours) || 0,
+                paint_rate: parseFloat(lineForm.paint_rate) || 0,
+                part_price: parseFloat(lineForm.part_price) || 0,
+                part_cost: parseFloat(lineForm.part_cost) || 0,
+                notes: lineForm.notes || null,
+            };
+            await api(`/estimates/${id}/lines`, { method: 'POST', body });
+            setLineForm({ line_type: lineForm.line_type, operation: '', description: '', part_number: '', part_type: 'OEM',
+                quantity: 1, labor_hours: 0, labor_rate: body.labor_rate, paint_hours: 0, paint_rate: body.paint_rate, part_price: 0, part_cost: 0, notes: '' });
+            load();
+        } catch (err) { alert(err.message); }
+        setLineSaving(false);
+    };
+
+    const deleteLine = async (lineId) => {
+        if (!confirm('Delete this line?')) return;
+        try {
+            await api(`/estimates/${id}/lines/${lineId}`, { method: 'DELETE' });
+            load();
+        } catch (err) { alert(err.message); }
+    };
+
+    const convertToRO = async () => {
+        if (!confirm('Convert this estimate to a Repair Order?')) return;
+        const res = await api(`/estimates/${id}/convert-to-ro`, { method: 'POST' });
+        alert(`Created ${res.ro_number}`);
+        navigate('ro-detail', res.id);
+    };
+
+    if (!est) return <div className="empty-state"><i className="fas fa-spinner fa-spin"></i></div>;
+
+    const lt = lineForm.line_type;
+    const lineTotal = lt === 'part' ? (parseFloat(lineForm.part_price)||0) * (parseFloat(lineForm.quantity)||1)
+        : lt === 'labor' ? (parseFloat(lineForm.labor_hours)||0) * (parseFloat(lineForm.labor_rate)||0)
+        : (lt === 'paint' || lt === 'refinish') ? (parseFloat(lineForm.paint_hours)||0) * (parseFloat(lineForm.paint_rate)||0)
+        : (parseFloat(lineForm.part_price)||0);
+
+    return (
+        <div>
+            <div className="page-header">
+                <div className="flex items-center gap-2">
+                    <button className="btn btn-outline btn-sm" onClick={() => navigate('estimates')}><i className="fas fa-arrow-left"></i></button>
+                    <h2>{est.estimate_number}</h2>
+                    <Badge status={est.status} />
+                </div>
+                <div className="flex gap-2">
+                    <a href={`${API}/exports/estimate/${id}/pdf`} target="_blank" className="btn btn-outline"><i className="fas fa-file-pdf"></i> Print PDF</a>
+                    {est.status !== 'converted' && (
+                        <button className="btn btn-success" onClick={convertToRO}><i className="fas fa-arrow-right"></i> Convert to RO</button>
+                    )}
+                </div>
+            </div>
+
+            <div className="detail-grid">
+                <div className="card">
+                    <div className="section-title"><i className="fas fa-user"></i> Customer & Vehicle</div>
+                    <div className="detail-row"><span className="detail-label">Customer</span><span className="detail-value">{custName(est)}</span></div>
+                    <div className="detail-row"><span className="detail-label">Vehicle</span><span className="detail-value">{vehDesc(est)}</span></div>
+                    <div className="detail-row"><span className="detail-label">VIN</span><span className="detail-value">{est.vin||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Color</span><span className="detail-value">{est.vehicle_color||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Mileage</span><span className="detail-value">{est.mileage ? est.mileage.toLocaleString() : '—'}</span></div>
+                </div>
+                <div className="card">
+                    <div className="detail-row"><span className="detail-label">Estimator</span><span className="detail-value">{[est.estimator_first, est.estimator_last].filter(Boolean).join(' ')||'—'}</span></div>
+                    {(est.insurance_name || est.claim_number || est.deductible > 0) ? <>
+                        <div style={{marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)'}}>
+                            <div className="section-title"><i className="fas fa-shield-halved"></i> Insurance</div>
+                        </div>
+                        <div className="detail-row"><span className="detail-label">Insurance</span><span className="detail-value">{est.insurance_name||'—'}</span></div>
+                        <div className="detail-row"><span className="detail-label">Claim #</span><span className="detail-value">{est.claim_number||'—'}</span></div>
+                        <div className="detail-row"><span className="detail-label">Deductible</span><span className="detail-value money">{fmt(est.deductible)}</span></div>
+                        <div className="detail-row"><span className="detail-label">Loss Date</span><span className="detail-value">{fmtDate(est.loss_date)}</span></div>
+                    </> : (
+                        <div className="detail-row" style={{marginTop: 8}}><span className="detail-label">Type</span><span className="detail-value">Customer Pay</span></div>
+                    )}
+                </div>
+            </div>
+
+            {est.damage_description && (
+                <div className="card mt-4">
+                    <div className="section-title"><i className="fas fa-clipboard"></i> Job Description</div>
+                    <p>{est.damage_description}</p>
+                </div>
+            )}
+
+            {/* ── Line Items Table ── */}
+            <div className="card mt-4">
+                <div className="card-header" style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                    <h3>Line Items ({(est.lines||[]).length})</h3>
+                    {est.status !== 'converted' && (
+                        <button className="btn btn-primary btn-sm" onClick={() => setShowAddLine(!showAddLine)}>
+                            <i className={`fas fa-${showAddLine ? 'times' : 'plus'}`}></i> {showAddLine ? 'Cancel' : 'Add Line'}
+                        </button>
+                    )}
+                </div>
+
+                {/* ── Add Line Form ── */}
+                {showAddLine && (
+                    <div style={{padding: 16, background: 'var(--bg)', borderRadius: 8, margin: '12px 0', border: '1px solid var(--border)'}}>
+
+                        {/* Panel/Part Picker */}
+                        <PanelPicker onSelect={(item) => {
+                            const opMap = { 'refinish': 'paint', 'replace': 'part', 'R&I': 'labor' };
+                            const newType = opMap[item.op] || 'labor';
+                            setLineField('line_type', newType);
+                            // Need to set multiple fields at once
+                            setLineForm(prev => {
+                                const findRate = (keyword) => { const r = rates.find(r => r.rate_type.includes(keyword)); return r ? r.rate_amount : 0; };
+                                return {
+                                    ...prev,
+                                    line_type: newType,
+                                    description: item.name,
+                                    operation: item.op === 'refinish' ? 'refinish' : item.op === 'R&I' ? 'remove_install' : 'replace',
+                                    labor_hours: newType === 'labor' ? prev.labor_hours : 0,
+                                    labor_rate: newType === 'labor' ? (findRate('body_labor') || prev.labor_rate) : 0,
+                                    paint_hours: newType === 'paint' ? prev.paint_hours : 0,
+                                    paint_rate: newType === 'paint' ? (findRate('paint') || prev.paint_rate) : 0,
+                                    part_price: newType === 'part' ? prev.part_price : 0,
+                                    part_cost: newType === 'part' ? prev.part_cost : 0,
+                                    part_number: '',
+                                    part_type: 'OEM',
+                                    quantity: 1,
+                                };
+                            });
+                        }} />
+
+                        <div style={{display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap'}}>
+                            {[{v:'labor',l:'Labor'},{v:'paint',l:'Paint/Refinish'},{v:'part',l:'Parts'},{v:'sublet',l:'Sublet'},{v:'other',l:'Other'}].map(t => (
+                                <button key={t.v} className={`btn btn-sm ${lt === t.v ? 'btn-primary' : 'btn-outline'}`}
+                                        onClick={() => setLineField('line_type', t.v)}>{t.l}</button>
+                            ))}
+                        </div>
+
+                        <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10}}>
+                            <div className="form-group">
+                                <label>Operation</label>
+                                <select value={lineForm.operation} onChange={e => setLineField('operation', e.target.value)} style={{padding: '8px 10px'}}>
+                                    <option value="">Select...</option>
+                                    {lt === 'labor' && <>
+                                        <option value="repair">Repair</option><option value="replace">Replace</option>
+                                        <option value="remove_install">R&I (Remove & Install)</option><option value="overhaul">Overhaul</option>
+                                        <option value="straighten">Straighten</option><option value="weld">Weld</option>
+                                        <option value="align">Align</option><option value="blend">Blend</option>
+                                    </>}
+                                    {(lt === 'paint' || lt === 'refinish') && <>
+                                        <option value="refinish">Refinish</option><option value="blend">Blend</option>
+                                        <option value="two_tone">Two-Tone</option><option value="three_stage">Three-Stage</option>
+                                        <option value="clearcoat">Clearcoat</option><option value="undercoat">Undercoat</option>
+                                        <option value="bedliner">Bedliner</option><option value="stripe">Stripe/Decal</option>
+                                    </>}
+                                    {lt === 'part' && <>
+                                        <option value="replace">Replace</option><option value="add">Add</option>
+                                    </>}
+                                    {lt === 'sublet' && <>
+                                        <option value="sublet">Sublet</option><option value="tow">Tow</option>
+                                        <option value="glass">Glass</option><option value="alignment">Alignment</option>
+                                    </>}
+                                    {lt === 'other' && <>
+                                        <option value="misc">Miscellaneous</option><option value="hazmat">Hazmat/Env Fee</option>
+                                        <option value="storage">Storage</option><option value="admin">Admin Fee</option>
+                                    </>}
+                                </select>
+                            </div>
+
+                            <div className="form-group" style={{gridColumn: 'span 2'}}>
+                                <label>Description *</label>
+                                <input value={lineForm.description} onChange={e => setLineField('description', e.target.value)}
+                                       placeholder={lt === 'part' ? 'Part name / description' : lt === 'paint' ? 'Panel or area' : 'Description of work'} />
+                            </div>
+
+                            {lt === 'part' && <>
+                                <div className="form-group">
+                                    <label>Part Number</label>
+                                    <input value={lineForm.part_number} onChange={e => setLineField('part_number', e.target.value)} placeholder="Part #" />
+                                </div>
+                                <div className="form-group">
+                                    <label>Part Type</label>
+                                    <select value={lineForm.part_type} onChange={e => setLineField('part_type', e.target.value)}>
+                                        <option value="OEM">OEM (New)</option>
+                                        <option value="aftermarket">Aftermarket</option>
+                                        <option value="used">Used/Recycled</option>
+                                        <option value="reconditioned">Reconditioned</option>
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>Quantity</label>
+                                    <input type="number" min="1" step="1" value={lineForm.quantity} onChange={e => setLineField('quantity', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label>Price (each)</label>
+                                    <input type="number" step="0.01" value={lineForm.part_price} onChange={e => setLineField('part_price', e.target.value)} placeholder="0.00" />
+                                </div>
+                                <div className="form-group">
+                                    <label>Cost (each)</label>
+                                    <input type="number" step="0.01" value={lineForm.part_cost} onChange={e => setLineField('part_cost', e.target.value)} placeholder="0.00" />
+                                </div>
+                            </>}
+
+                            {lt === 'labor' && <>
+                                <div className="form-group">
+                                    <label>Hours</label>
+                                    <input type="number" step="0.1" value={lineForm.labor_hours} onChange={e => setLineField('labor_hours', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label>Rate ($/hr)</label>
+                                    <input type="number" step="0.01" value={lineForm.labor_rate} onChange={e => setLineField('labor_rate', e.target.value)} />
+                                </div>
+                            </>}
+
+                            {(lt === 'paint' || lt === 'refinish') && <>
+                                <div className="form-group">
+                                    <label>Paint Hours</label>
+                                    <input type="number" step="0.1" value={lineForm.paint_hours} onChange={e => setLineField('paint_hours', e.target.value)} />
+                                </div>
+                                <div className="form-group">
+                                    <label>Paint Rate ($/hr)</label>
+                                    <input type="number" step="0.01" value={lineForm.paint_rate} onChange={e => setLineField('paint_rate', e.target.value)} />
+                                </div>
+                            </>}
+
+                            {(lt === 'sublet' || lt === 'other') && <>
+                                <div className="form-group">
+                                    <label>Amount</label>
+                                    <input type="number" step="0.01" value={lineForm.part_price} onChange={e => setLineField('part_price', e.target.value)} placeholder="0.00" />
+                                </div>
+                            </>}
+                        </div>
+
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)'}}>
+                            <div style={{fontSize: 15, fontWeight: 600}}>
+                                Line Total: <span style={{color:'var(--primary)', fontSize: 17}}>{fmt(lineTotal)}</span>
+                            </div>
+                            <button className="btn btn-primary" onClick={addLine} disabled={lineSaving || !lineForm.description}>
+                                {lineSaving ? <><i className="fas fa-spinner fa-spin"></i> Adding...</> : <><i className="fas fa-plus"></i> Add Line</>}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                <div className="table-wrapper">
+                    <table><thead><tr><th>#</th><th>Type</th><th>Operation</th><th>Description</th><th>Part #</th><th>Hours</th><th>Rate</th><th>Parts $</th><th>Total</th>{est.status !== 'converted' && <th></th>}</tr></thead>
+                    <tbody>
+                    {(est.lines||[]).length === 0 && (
+                        <tr><td colSpan={est.status !== 'converted' ? 10 : 9} style={{textAlign:'center', color:'var(--text-muted)', padding: 24}}>
+                            No line items yet — click "Add Line" to start building the estimate
+                        </td></tr>
+                    )}
+                    {(est.lines||[]).map(l => (
+                        <tr key={l.id}>
+                            <td>{l.line_number}</td>
+                            <td><Badge status={l.line_type} /></td>
+                            <td>{l.operation||'—'}</td>
+                            <td>{l.description}</td>
+                            <td className="text-sm">{l.part_number||'—'}</td>
+                            <td>{l.labor_hours || l.paint_hours || '—'}</td>
+                            <td>{l.labor_rate || l.paint_rate || '—'}</td>
+                            <td className="money">{l.part_price ? fmt(l.part_price * (l.quantity||1)) : '—'}</td>
+                            <td className="money" style={{fontWeight:600}}>{fmt(l.line_total)}</td>
+                            {est.status !== 'converted' && (
+                                <td><button className="btn btn-outline btn-sm" style={{color:'var(--red)', borderColor:'var(--red)', padding:'4px 8px'}}
+                                        onClick={() => deleteLine(l.id)} title="Delete line"><i className="fas fa-trash"></i></button></td>
+                            )}
+                        </tr>
+                    ))}
+                    </tbody></table>
+                </div>
+                <div style={{display:'flex', justifyContent:'flex-end', marginTop:16}}>
+                    <div style={{width:280}}>
+                        <div className="detail-row"><span className="detail-label">Labor</span><span className="detail-value money">{fmt(est.subtotal_labor)}</span></div>
+                        <div className="detail-row"><span className="detail-label">Parts</span><span className="detail-value money">{fmt(est.subtotal_parts)}</span></div>
+                        <div className="detail-row"><span className="detail-label">Paint</span><span className="detail-value money">{fmt(est.subtotal_paint)}</span></div>
+                        <div className="detail-row"><span className="detail-label">Tax</span><span className="detail-value money">{fmt(est.tax_amount)}</span></div>
+                        <div className="detail-row" style={{borderTop:'2px solid var(--primary)', paddingTop:8}}>
+                            <span className="detail-label" style={{fontWeight:700,fontSize:15}}>Total</span>
+                            <span className="detail-value money" style={{fontSize:18,color:'var(--primary)'}}>{fmt(est.total_amount)}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// REPAIR ORDERS LIST
+// ═══════════════════════════════════════════════════════════
+function RepairOrdersPage({ navigate }) {
+    const [ros, setRos] = useState([]);
+    const [search, setSearch] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
+
+    useEffect(() => {
+        let q = '/repair-orders?';
+        if (search) q += `search=${search}&`;
+        if (statusFilter) q += `status=${statusFilter}`;
+        api(q).then(setRos);
+    }, [search, statusFilter]);
+
+    return (
+        <div>
+            <div className="page-header"><h2>Repair Orders</h2></div>
+            <div className="search-bar">
+                <input placeholder="Search RO #, customer, VIN, claim..." value={search} onChange={e => setSearch(e.target.value)} />
+                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{width:160}}>
+                    <option value="">All Statuses</option>
+                    <option value="open">Open</option><option value="in_progress">In Progress</option>
+                    <option value="on_hold">On Hold</option><option value="completed">Completed</option>
+                    <option value="delivered">Delivered</option><option value="closed">Closed</option>
+                </select>
+            </div>
+            <div className="card"><div className="table-wrapper">
+                <table><thead><tr><th>RO #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Priority</th><th>Target Date</th><th>Total</th><th>Balance</th></tr></thead>
+                <tbody>
+                {ros.map(r => (
+                    <tr key={r.id} className="clickable" onClick={() => navigate('ro-detail', r.id)}>
+                        <td style={{color:'var(--primary)', fontWeight:600}}>{r.ro_number}</td>
+                        <td>{custName(r)}</td>
+                        <td>{vehDesc(r)}</td>
+                        <td><Badge status={r.status} /></td>
+                        <td><Badge status={r.priority} /></td>
+                        <td>{fmtDate(r.target_delivery_date)}</td>
+                        <td className="money">{fmt(r.total_amount)}</td>
+                        <td className="money" style={{color: r.balance_due > 0 ? 'var(--red)' : 'var(--green)'}}>{fmt(r.balance_due)}</td>
+                    </tr>
+                ))}
+                </tbody></table>
+            </div></div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// REPAIR ORDER DETAIL
+// ═══════════════════════════════════════════════════════════
+function RODetail({ id, navigate }) {
+    const [ro, setRo] = useState(null);
+    const [tab, setTab] = useState('lines');
+    const [showPayment, setShowPayment] = useState(false);
+    const [payForm, setPayForm] = useState({amount:'',payment_method:'insurance',reference_number:'',payer_name:''});
+
+    const load = () => api(`/repair-orders/${id}`).then(setRo);
+    useEffect(() => { load(); }, [id]);
+    if (!ro) return <div className="empty-state"><i className="fas fa-spinner fa-spin"></i></div>;
+
+    const addPayment = async () => {
+        await api(`/repair-orders/${id}/payments`, { method: 'POST', body: { ...payForm, amount: parseFloat(payForm.amount) } });
+        setShowPayment(false);
+        setPayForm({amount:'',payment_method:'insurance',reference_number:'',payer_name:''});
+        load();
+    };
+
+    return (
+        <div>
+            <div className="page-header">
+                <div className="flex items-center gap-2">
+                    <button className="btn btn-outline btn-sm" onClick={() => navigate('repair-orders')}><i className="fas fa-arrow-left"></i></button>
+                    <h2>{ro.ro_number}</h2>
+                    <Badge status={ro.status} />
+                    <Badge status={ro.priority} />
+                </div>
+                <div className="flex gap-2">
+                    <a href={`${API}/exports/ro/${id}/invoice-pdf`} target="_blank" className="btn btn-primary"><i className="fas fa-file-invoice"></i> Invoice PDF</a>
+                    <a href={`${API}/exports/ro/${id}/work-order-pdf`} target="_blank" className="btn btn-outline"><i className="fas fa-clipboard-list"></i> Work Order</a>
+                </div>
+            </div>
+
+            <div className="detail-grid">
+                <div className="card">
+                    <div className="section-title"><i className="fas fa-user"></i> Customer & Vehicle</div>
+                    <div className="detail-row"><span className="detail-label">Customer</span><span className="detail-value clickable" style={{color:'var(--primary)'}} onClick={() => navigate('customer-detail', ro.customer_id)}>{custName(ro)}</span></div>
+                    <div className="detail-row"><span className="detail-label">Phone</span><span className="detail-value">{ro.customer_phone||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Vehicle</span><span className="detail-value">{vehDesc(ro)}</span></div>
+                    <div className="detail-row"><span className="detail-label">VIN</span><span className="detail-value">{ro.vin||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Color</span><span className="detail-value">{ro.vehicle_color||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">License</span><span className="detail-value">{ro.license_plate||'—'}</span></div>
+                </div>
+                <div className="card">
+                    <div className="section-title"><i className="fas fa-shield-halved"></i> Insurance & Assignment</div>
+                    <div className="detail-row"><span className="detail-label">Insurance</span><span className="detail-value">{ro.insurance_name||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Claim #</span><span className="detail-value">{ro.claim_number||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Deductible</span><span className="detail-value money">{fmt(ro.deductible)}</span></div>
+                    <div className="detail-row"><span className="detail-label">Estimator</span><span className="detail-value">{[ro.estimator_first, ro.estimator_last].filter(Boolean).join(' ')||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Technician</span><span className="detail-value">{[ro.tech_first, ro.tech_last].filter(Boolean).join(' ')||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Painter</span><span className="detail-value">{[ro.painter_first, ro.painter_last].filter(Boolean).join(' ')||'—'}</span></div>
+                </div>
+            </div>
+
+            {/* Dates */}
+            <div className="card mt-4">
+                <div className="section-title"><i className="fas fa-calendar"></i> Key Dates</div>
+                <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px,1fr))', gap:8}}>
+                    {[['Loss Date', ro.loss_date],['Scheduled In', ro.scheduled_in_date],['Vehicle Arrived', ro.vehicle_arrived_date],
+                      ['Repair Started', ro.repair_start_date],['Target Delivery', ro.target_delivery_date],['Completed', ro.actual_complete_date],
+                      ['Customer Notified', ro.notify_customer_date],['Delivered', ro.delivered_date]].map(([lbl,val]) => (
+                        <div key={lbl} className="detail-row"><span className="detail-label">{lbl}</span><span className="detail-value">{fmtDate(val)}</span></div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="tabs mt-4">
+                {[['lines','Line Items'],['payments','Payments'],['timecards','Time Cards']].map(([k,l]) => (
+                    <div key={k} className={`tab ${tab===k?'active':''}`} onClick={() => setTab(k)}>{l}</div>
+                ))}
+            </div>
+
+            {tab === 'lines' && (
+                <div className="card">
+                    <div className="table-wrapper">
+                        <table><thead><tr><th>#</th><th>Type</th><th>Op</th><th>Description</th><th>Part #</th><th>Qty</th><th>Hours</th><th>Rate</th><th>Parts $</th><th>Status</th><th>Total</th></tr></thead>
+                        <tbody>
+                        {(ro.lines||[]).map(l => (
+                            <tr key={l.id}>
+                                <td>{l.line_number}</td><td><Badge status={l.line_type}/></td><td>{l.operation||'—'}</td>
+                                <td>{l.description}</td><td className="text-sm">{l.part_number||'—'}</td>
+                                <td>{l.quantity}</td><td>{l.labor_hours||l.paint_hours||'—'}</td><td>{l.labor_rate||l.paint_rate||'—'}</td>
+                                <td className="money">{l.part_price ? fmt(l.part_price):'—'}</td>
+                                <td><Badge status={l.status}/></td>
+                                <td className="money" style={{fontWeight:600}}>{fmt(l.line_total)}</td>
+                            </tr>
+                        ))}
+                        </tbody></table>
+                    </div>
+                    <div style={{display:'flex', justifyContent:'flex-end', marginTop:16}}>
+                        <div style={{width:300}}>
+                            <div className="detail-row"><span className="detail-label">Labor</span><span className="detail-value money">{fmt(ro.subtotal_labor)}</span></div>
+                            <div className="detail-row"><span className="detail-label">Parts</span><span className="detail-value money">{fmt(ro.subtotal_parts)}</span></div>
+                            <div className="detail-row"><span className="detail-label">Paint</span><span className="detail-value money">{fmt(ro.subtotal_paint)}</span></div>
+                            <div className="detail-row"><span className="detail-label">Tax</span><span className="detail-value money">{fmt(ro.tax_amount)}</span></div>
+                            <div className="detail-row" style={{borderTop:'2px solid var(--border)'}}><span className="detail-label" style={{fontWeight:700}}>Total</span><span className="detail-value money" style={{fontSize:16}}>{fmt(ro.total_amount)}</span></div>
+                            <div className="detail-row"><span className="detail-label">Paid</span><span className="detail-value money text-green">{fmt(ro.amount_paid)}</span></div>
+                            <div className="detail-row" style={{borderTop:'2px solid var(--primary)'}}><span className="detail-label" style={{fontWeight:700,fontSize:15}}>Balance Due</span><span className="detail-value money" style={{fontSize:18,color: ro.balance_due > 0 ? 'var(--red)':'var(--green)'}}>{fmt(ro.balance_due)}</span></div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {tab === 'payments' && (
+                <div className="card">
+                    <div className="card-header"><h3>Payments</h3><button className="btn btn-primary btn-sm" onClick={() => setShowPayment(true)}><i className="fas fa-plus"></i> Add Payment</button></div>
+                    <table><thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th><th>Payer</th></tr></thead>
+                    <tbody>
+                    {(ro.payments||[]).map(p => (
+                        <tr key={p.id}>
+                            <td>{fmtDate(p.payment_date)}</td><td className="money text-green" style={{fontWeight:600}}>{fmt(p.amount)}</td>
+                            <td>{(p.payment_method||'').replace(/_/g,' ')}</td><td>{p.reference_number||'—'}</td><td>{p.payer_name||'—'}</td>
+                        </tr>
+                    ))}
+                    {!(ro.payments||[]).length && <tr><td colSpan="5" className="text-muted" style={{textAlign:'center',padding:24}}>No payments recorded</td></tr>}
+                    </tbody></table>
+                </div>
+            )}
+
+            {tab === 'timecards' && (
+                <div className="card">
+                    <div className="card-header"><h3>Time Cards</h3></div>
+                    <table><thead><tr><th>Employee</th><th>Clock In</th><th>Clock Out</th><th>Hours</th><th>Type</th></tr></thead>
+                    <tbody>
+                    {(ro.time_cards||[]).map(t => (
+                        <tr key={t.id}>
+                            <td>{[t.first_name, t.last_name].filter(Boolean).join(' ')}</td>
+                            <td>{t.clock_in}</td><td>{t.clock_out||'—'}</td>
+                            <td>{t.hours_worked}</td><td>{t.activity_type}</td>
+                        </tr>
+                    ))}
+                    {!(ro.time_cards||[]).length && <tr><td colSpan="5" className="text-muted" style={{textAlign:'center',padding:24}}>No time cards</td></tr>}
+                    </tbody></table>
+                </div>
+            )}
+
+            <Modal open={showPayment} onClose={() => setShowPayment(false)} title="Record Payment">
+                <div className="form-grid">
+                    <div className="form-group"><label>Amount</label><input type="number" step="0.01" value={payForm.amount} onChange={e => setPayForm({...payForm, amount: e.target.value})} /></div>
+                    <div className="form-group"><label>Method</label>
+                        <select value={payForm.payment_method} onChange={e => setPayForm({...payForm, payment_method: e.target.value})}>
+                            <option value="insurance">Insurance</option><option value="check">Check</option>
+                            <option value="cash">Cash</option><option value="credit_card">Credit Card</option>
+                            <option value="debit">Debit</option><option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div className="form-group"><label>Reference #</label><input value={payForm.reference_number} onChange={e => setPayForm({...payForm, reference_number: e.target.value})} /></div>
+                    <div className="form-group"><label>Payer Name</label><input value={payForm.payer_name} onChange={e => setPayForm({...payForm, payer_name: e.target.value})} /></div>
+                </div>
+                <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowPayment(false)}>Cancel</button><button className="btn btn-success" onClick={addPayment}><i className="fas fa-check"></i> Record Payment</button></div>
+            </Modal>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// INSURANCE
+// ═══════════════════════════════════════════════════════════
+function InsurancePage({ navigate }) {
+    const [companies, setCompanies] = useState([]);
+    const [search, setSearch] = useState('');
+    useEffect(() => { api('/insurance' + (search ? `?search=${search}` : '')).then(setCompanies); }, [search]);
+    return (
+        <div>
+            <div className="page-header"><h2>Insurance Companies</h2></div>
+            <div className="search-bar"><input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} /></div>
+            <div className="card"><div className="table-wrapper">
+                <table><thead><tr><th>Company</th><th>Phone</th><th>Email</th><th>City</th></tr></thead>
+                <tbody>{companies.map(c => (
+                    <tr key={c.id}><td style={{fontWeight:500}}>{c.company_name}</td><td>{c.phone||'—'}</td><td>{c.email||'—'}</td><td>{c.city||'—'}</td></tr>
+                ))}</tbody></table>
+            </div></div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// EMPLOYEES
+// ═══════════════════════════════════════════════════════════
+function EmployeesPage({ navigate }) {
+    const [employees, setEmployees] = useState([]);
+    useEffect(() => { api('/employees').then(setEmployees); }, []);
+    return (
+        <div>
+            <div className="page-header"><h2>Employees</h2></div>
+            <div className="card"><div className="table-wrapper">
+                <table><thead><tr><th>Code</th><th>Name</th><th>Role</th><th>Hourly Rate</th><th>Flag Rate</th><th>Status</th></tr></thead>
+                <tbody>{employees.map(e => (
+                    <tr key={e.id}>
+                        <td style={{fontWeight:600}}>{e.employee_code}</td>
+                        <td>{e.first_name} {e.last_name}</td>
+                        <td><Badge status={e.role}/></td>
+                        <td className="money">{e.hourly_rate > 0 ? fmt(e.hourly_rate) : '—'}</td>
+                        <td className="money">{e.flag_rate > 0 ? fmt(e.flag_rate) : '—'}</td>
+                        <td>{e.is_active ? <span className="text-green">Active</span> : <span className="text-red">Inactive</span>}</td>
+                    </tr>
+                ))}</tbody></table>
+            </div></div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// VENDORS
+// ═══════════════════════════════════════════════════════════
+function VendorsPage({ navigate }) {
+    const [vendors, setVendors] = useState([]);
+    const [search, setSearch] = useState('');
+    useEffect(() => { api('/vendors' + (search ? `?search=${search}` : '')).then(setVendors); }, [search]);
+    return (
+        <div>
+            <div className="page-header"><h2>Vendors</h2></div>
+            <div className="search-bar"><input placeholder="Search vendors..." value={search} onChange={e => setSearch(e.target.value)} /></div>
+            <div className="card"><div className="table-wrapper">
+                <table><thead><tr><th>Vendor</th><th>Type</th><th>Contact</th><th>Phone</th><th>City</th></tr></thead>
+                <tbody>{vendors.map(v => (
+                    <tr key={v.id}><td style={{fontWeight:500}}>{v.vendor_name}</td><td><Badge status={v.vendor_type}/></td><td>{v.contact_name||'—'}</td><td>{v.phone||'—'}</td><td>{v.city||'—'}</td></tr>
+                ))}</tbody></table>
+            </div></div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// PRODUCTION BOARD
+// ═══════════════════════════════════════════════════════════
+function ProductionPage({ navigate }) {
+    const [ros, setRos] = useState([]);
+    useEffect(() => { api('/repair-orders?status=in_progress').then(setRos).catch(() => api('/repair-orders').then(r => setRos(r.filter(x => ['open','in_progress','on_hold'].includes(x.status))))); }, []);
+
+    const statusCols = {open: 'Scheduled', in_progress: 'In Progress', on_hold: 'On Hold', completed: 'Completed'};
+    const grouped = {};
+    Object.keys(statusCols).forEach(s => grouped[s] = []);
+    ros.forEach(r => { if (grouped[r.status]) grouped[r.status].push(r); });
+
+    return (
+        <div>
+            <div className="page-header"><h2>Production Board</h2></div>
+            <div style={{display:'grid', gridTemplateColumns: `repeat(${Object.keys(statusCols).length}, 1fr)`, gap:16}}>
+                {Object.entries(statusCols).map(([status, label]) => (
+                    <div key={status}>
+                        <div style={{padding:'8px 12px', background:'var(--bg-card)', borderRadius:'8px 8px 0 0', borderBottom:'2px solid var(--primary)', marginBottom:8}}>
+                            <span style={{fontWeight:600, fontSize:14}}>{label}</span>
+                            <span className="text-muted text-sm" style={{marginLeft:8}}>({(grouped[status]||[]).length})</span>
+                        </div>
+                        {(grouped[status]||[]).map(r => (
+                            <div key={r.id} className="card clickable" onClick={() => navigate('ro-detail', r.id)} style={{padding:12, marginBottom:8}}>
+                                <div style={{fontWeight:600, color:'var(--primary)', fontSize:13}}>{r.ro_number}</div>
+                                <div className="text-sm">{custName(r)}</div>
+                                <div className="text-sm text-muted">{vehDesc(r)}</div>
+                                {r.target_delivery_date && <div className="text-sm" style={{marginTop:4}}>Target: {fmtDate(r.target_delivery_date)}</div>}
+                            </div>
+                        ))}
+                        {!(grouped[status]||[]).length && <div className="text-muted text-sm" style={{textAlign:'center',padding:24}}>None</div>}
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// REPORTS
+// ═══════════════════════════════════════════════════════════
+function ReportsPage() {
+    const [tab, setTab] = useState('production');
+    const [prodData, setProdData] = useState(null);
+    const [arData, setArData] = useState([]);
+    const [empData, setEmpData] = useState([]);
+    const [partsData, setPartsData] = useState([]);
+    const [cycleData, setCycleData] = useState([]);
+
+    useEffect(() => {
+        if (tab === 'production') api('/reports/production-summary').then(setProdData);
+        if (tab === 'ar') api('/reports/ar-aging').then(setArData);
+        if (tab === 'employees') api('/reports/employee-productivity').then(setEmpData);
+        if (tab === 'parts') api('/reports/parts-summary').then(setPartsData);
+        if (tab === 'cycle') api('/reports/cycle-time').then(setCycleData);
+    }, [tab]);
+
+    return (
+        <div>
+            <div className="page-header"><h2>Reports</h2></div>
+            <div className="tabs">
+                {[['production','Production'],['ar','AR Aging'],['employees','Employee Prod.'],['parts','Parts'],['cycle','Cycle Time']].map(([k,l]) => (
+                    <div key={k} className={`tab ${tab===k?'active':''}`} onClick={() => setTab(k)}>{l}</div>
+                ))}
+            </div>
+
+            {tab === 'production' && prodData && (
+                <div className="stats-grid">
+                    <div className="stat-card"><div className="label">Active ROs</div><div className="value blue">{prodData.active_ros}</div></div>
+                    <div className="stat-card"><div className="label">Completed ROs</div><div className="value green">{prodData.completed_ros}</div></div>
+                    <div className="stat-card"><div className="label">Total Billed</div><div className="value money">{fmt(prodData.total_billed)}</div></div>
+                    <div className="stat-card"><div className="label">Collected</div><div className="value green money">{fmt(prodData.total_collected)}</div></div>
+                    <div className="stat-card"><div className="label">Outstanding</div><div className="value red money">{fmt(prodData.total_outstanding)}</div></div>
+                    <div className="stat-card"><div className="label">Total Labor</div><div className="value money">{fmt(prodData.total_labor)}</div></div>
+                    <div className="stat-card"><div className="label">Total Parts</div><div className="value money">{fmt(prodData.total_parts)}</div></div>
+                    <div className="stat-card"><div className="label">Total Paint</div><div className="value money">{fmt(prodData.total_paint)}</div></div>
+                </div>
+            )}
+
+            {tab === 'ar' && (
+                <div className="card"><div className="table-wrapper">
+                    <table><thead><tr><th>RO #</th><th>Customer</th><th>Insurance</th><th>Total</th><th>Paid</th><th>Balance</th><th>Days Old</th></tr></thead>
+                    <tbody>{arData.map(r => (
+                        <tr key={r.ro_number}>
+                            <td style={{color:'var(--primary)'}}>{r.ro_number}</td><td>{custName(r)}</td><td>{r.insurance_name||'—'}</td>
+                            <td className="money">{fmt(r.total_amount)}</td><td className="money text-green">{fmt(r.amount_paid)}</td>
+                            <td className="money text-red" style={{fontWeight:600}}>{fmt(r.balance_due)}</td>
+                            <td style={{color: r.days_old > 60 ? 'var(--red)' : r.days_old > 30 ? 'var(--yellow)' : 'var(--text)'}}>{Math.round(r.days_old||0)}</td>
+                        </tr>
+                    ))}</tbody></table>
+                </div></div>
+            )}
+
+            {tab === 'employees' && (
+                <div className="card"><div className="table-wrapper">
+                    <table><thead><tr><th>Code</th><th>Name</th><th>Role</th><th>Total Hours</th><th>ROs Worked</th></tr></thead>
+                    <tbody>{empData.map(e => (
+                        <tr key={e.id}><td>{e.employee_code}</td><td>{e.first_name} {e.last_name}</td><td><Badge status={e.role}/></td>
+                        <td>{e.total_hours}</td><td>{e.ros_worked}</td></tr>
+                    ))}</tbody></table>
+                </div></div>
+            )}
+
+            {tab === 'parts' && (
+                <div className="card"><div className="table-wrapper">
+                    <table><thead><tr><th>Part #</th><th>Description</th><th>Type</th><th>Qty</th><th>Price</th><th>Cost</th><th>Profit</th></tr></thead>
+                    <tbody>{partsData.map((p,i) => (
+                        <tr key={i}><td>{p.part_number}</td><td>{p.description}</td><td><Badge status={p.part_type}/></td>
+                        <td>{p.total_qty}</td><td className="money">{fmt(p.total_price)}</td><td className="money">{fmt(p.total_cost)}</td>
+                        <td className="money text-green">{fmt(p.profit)}</td></tr>
+                    ))}</tbody></table>
+                </div></div>
+            )}
+
+            {tab === 'cycle' && (
+                <div className="card"><div className="table-wrapper">
+                    <table><thead><tr><th>RO #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Keys-to-Keys</th><th>Repair Days</th><th>vs Target</th></tr></thead>
+                    <tbody>{cycleData.map(r => (
+                        <tr key={r.ro_number}>
+                            <td style={{color:'var(--primary)'}}>{r.ro_number}</td><td>{custName(r)}</td><td>{vehDesc(r)}</td>
+                            <td><Badge status={r.status}/></td>
+                            <td>{r.keys_to_keys_days != null ? `${Math.round(r.keys_to_keys_days)} days` : '—'}</td>
+                            <td>{r.repair_days != null ? `${Math.round(r.repair_days)} days` : '—'}</td>
+                            <td style={{color: r.days_from_target > 0 ? 'var(--red)' : r.days_from_target != null ? 'var(--green)' : 'inherit'}}>
+                                {r.days_from_target != null ? `${r.days_from_target > 0 ? '+' : ''}${Math.round(r.days_from_target)} days` : '—'}
+                            </td>
+                        </tr>
+                    ))}</tbody></table>
+                </div></div>
+            )}
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════════
+function SettingsPage() {
+    const [info, setInfo] = useState(null);
+    const [rates, setRates] = useState([]);
+    useEffect(() => {
+        api('/shop/info').then(setInfo);
+        api('/shop/rates').then(setRates);
+    }, []);
+
+    const save = async () => {
+        await api('/shop/info', { method: 'PUT', body: info });
+        alert('Shop info saved!');
+    };
+
+    if (!info) return <div className="empty-state"><i className="fas fa-spinner fa-spin"></i></div>;
+    return (
+        <div>
+            <div className="page-header"><h2>Shop Settings</h2><button className="btn btn-primary" onClick={save}><i className="fas fa-save"></i> Save</button></div>
+            <div className="card">
+                <div className="section-title"><i className="fas fa-store"></i> Shop Information</div>
+                <div className="form-grid">
+                    {[['shop_name','Shop Name'],['address','Address'],['city','City'],['state','State'],['zip_code','ZIP'],['phone','Phone'],['fax','Fax'],['email','Email'],['tax_id','Tax ID'],['license_number','License #']].map(([k,l]) => (
+                        <div className="form-group" key={k}><label>{l}</label><input value={info[k]||''} onChange={e => setInfo({...info, [k]: e.target.value})} /></div>
+                    ))}
+                </div>
+            </div>
+            <div className="card">
+                <div className="section-title"><i className="fas fa-dollar-sign"></i> Shop Rates</div>
+                <table><thead><tr><th>Rate Name</th><th>Type</th><th>Amount</th></tr></thead>
+                <tbody>{rates.map(r => (
+                    <tr key={r.id}><td>{r.rate_name}</td><td>{(r.rate_type||'').replace(/_/g,' ')}</td><td className="money" style={{fontWeight:600}}>{fmt(r.rate_amount)}/hr</td></tr>
+                ))}</tbody></table>
+            </div>
+            <div className="card">
+                <div className="section-title"><i className="fas fa-file-export"></i> Data Export</div>
+                <p style={{fontSize: 13, color: 'var(--text-muted)', marginBottom: 16}}>Export shop data for accounting systems or Mitchell Connect.</p>
+                <div className="flex gap-2" style={{flexWrap: 'wrap'}}>
+                    <a href={`${API}/exports/quickbooks`} className="btn btn-primary" download><i className="fas fa-file-invoice-dollar"></i> QuickBooks IIF</a>
+                    <a href={`${API}/exports/xml`} className="btn btn-outline" download><i className="fas fa-code"></i> XML Export</a>
+                    <a href={`${API}/exports/mitchell-connect`} className="btn btn-warning" download><i className="fas fa-exchange-alt"></i> Mitchell Connect XML</a>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// TOUCH LOGIN SCREEN (for worker touchscreen PCs)
+// Tap your name → enter 4-digit PIN on touch pad → auto-login
+// ═══════════════════════════════════════════════════════════
+function TouchLoginScreen({ onLogin, onAdminLogin }) {
+    const [workers, setWorkers] = useState([]);
+    const [selected, setSelected] = useState(null);
+    const [pin, setPin] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        api('/auth/workers').then(setWorkers).catch(() => {});
+    }, []);
+
+    const handlePinKey = async (digit) => {
+        if (loading) return;
+        const newPin = pin + digit;
+        setPin(newPin);
+        setError('');
+        if (newPin.length === 4) {
+            // Auto-submit on 4th digit
+            setLoading(true);
+            try {
+                const result = await api('/auth/login', {
+                    method: 'POST',
+                    body: { username: selected.username, pin: newPin }
+                });
+                setAuthToken(result.token);
+                onLogin(result);
+            } catch (err) {
+                setError('Wrong PIN — try again');
+                setPin('');
+            }
+            setLoading(false);
+        }
+    };
+
+    const handleBackspace = () => {
+        setPin(prev => prev.slice(0, -1));
+        setError('');
+    };
+
+    const handleBack = () => {
+        setSelected(null);
+        setPin('');
+        setError('');
+    };
+
+    // PIN Pad screen (after selecting a worker)
+    if (selected) {
+        return (
+            <div className="touch-login">
+                <div style={{textAlign: 'center', marginBottom: 24}}>
+                    <img src="/logo.png" alt="WR Big Rig" style={{height: 60, marginBottom: 12}} />
+                </div>
+                <div style={{textAlign: 'center', marginBottom: 24}}>
+                    <div style={{fontSize: 28, fontWeight: 700, color: 'var(--primary)'}}>
+                        <i className="fas fa-user-circle" style={{marginRight: 10}}></i>
+                        {selected.display_name || selected.username}
+                    </div>
+                    <div style={{fontSize: 16, color: 'var(--text-muted)', marginTop: 4}}>Enter your 4-digit PIN</div>
+                </div>
+
+                {/* PIN dots */}
+                <div className="pin-dots">
+                    {[0,1,2,3].map(i => (
+                        <div key={i} className={`pin-dot ${i < pin.length ? 'filled' : ''}`}></div>
+                    ))}
+                </div>
+
+                {error && <div style={{textAlign: 'center', color: 'var(--red)', fontSize: 18, marginBottom: 16, fontWeight: 600}}>
+                    <i className="fas fa-exclamation-triangle"></i> {error}
+                </div>}
+
+                {loading && <div style={{textAlign: 'center', marginBottom: 16}}>
+                    <i className="fas fa-spinner fa-spin" style={{fontSize: 28, color: 'var(--primary)'}}></i>
+                </div>}
+
+                {/* Number pad */}
+                <div className="pin-pad">
+                    {[1,2,3,4,5,6,7,8,9].map(d => (
+                        <button key={d} className="pin-key" onClick={() => handlePinKey(String(d))}>{d}</button>
+                    ))}
+                    <button className="pin-key pin-key-back" onClick={handleBack}>
+                        <i className="fas fa-arrow-left"></i>
+                    </button>
+                    <button className="pin-key" onClick={() => handlePinKey('0')}>0</button>
+                    <button className="pin-key pin-key-back" onClick={handleBackspace}>
+                        <i className="fas fa-backspace"></i>
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // Worker selection grid
+    return (
+        <div className="touch-login">
+            <div style={{textAlign: 'center', marginBottom: 24}}>
+                <img src="/logo.png" alt="WR Big Rig" style={{height: 80, marginBottom: 8}} />
+                <div style={{fontSize: 16, color: 'var(--text-muted)'}}>Tap your name to clock in</div>
+            </div>
+
+            <div className="worker-grid">
+                {workers.map(w => (
+                    <button key={w.id} className="worker-card" onClick={() => setSelected(w)}>
+                        <i className="fas fa-user-circle" style={{fontSize: 40, marginBottom: 8, color: 'var(--primary)'}}></i>
+                        <div style={{fontSize: 20, fontWeight: 700}}>{w.display_name || w.username}</div>
+                        {w.employee_id && <div style={{fontSize: 12, color: 'var(--text-muted)', marginTop: 2}}>#{w.employee_id}</div>}
+                    </button>
+                ))}
+            </div>
+
+            <div style={{textAlign: 'center', marginTop: 32}}>
+                <button className="btn btn-outline" style={{fontSize: 14, padding: '10px 24px'}} onClick={onAdminLogin}>
+                    <i className="fas fa-shield-alt"></i> Admin / Office Login
+                </button>
+            </div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// STANDARD LOGIN SCREEN (for admin/office with keyboard)
+// ═══════════════════════════════════════════════════════════
+function LoginScreen({ onLogin, onBack }) {
+    const [username, setUsername] = useState('');
+    const [pin, setPin] = useState('');
+    const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+            const result = await api('/auth/login', {
+                method: 'POST',
+                body: { username, pin }
+            });
+            setAuthToken(result.token);
+            onLogin(result);
+        } catch (err) {
+            setError(err.message || 'Login failed');
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div className="login-container">
+            <form className="login-box" onSubmit={handleSubmit}>
+                <div className="login-logo"><img src="/logo.png" alt="WR Big Rig" style={{height: 80}} /></div>
+                <div className="subtitle" style={{marginTop: 8}}>Admin / Office Login</div>
+                <div className="form-group">
+                    <label>Username</label>
+                    <input type="text" value={username} onChange={e => setUsername(e.target.value)}
+                           placeholder="Enter username" autoFocus autoComplete="username" />
+                </div>
+                <div className="form-group">
+                    <label>PIN</label>
+                    <input type="password" value={pin} onChange={e => setPin(e.target.value)}
+                           placeholder="Enter PIN" inputMode="numeric" autoComplete="current-password" />
+                </div>
+                {error && <div className="login-error"><i className="fas fa-exclamation-circle"></i> {error}</div>}
+                <button className="btn btn-primary" type="submit" disabled={loading}>
+                    {loading ? <><i className="fas fa-spinner fa-spin"></i> Signing In...</> : <><i className="fas fa-sign-in-alt"></i> Sign In</>}
+                </button>
+                {onBack && <div style={{marginTop: 16, textAlign: 'center'}}>
+                    <button type="button" className="btn btn-outline btn-sm" onClick={onBack}>
+                        <i className="fas fa-arrow-left"></i> Back to TecStation
+                    </button>
+                </div>}
+                <div style={{marginTop: 20, fontSize: 11, color: 'var(--text-muted)'}}>
+                    Default admin: <b>admin</b> / PIN: <b>1234</b>
+                </div>
+            </form>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// WORKER TIME CLOCK (touch optimized — NO actual time display)
+// Shows only elapsed timer after clock-in + today's total
+// ═══════════════════════════════════════════════════════════
+function TimeClock({ user }) {
+    const [tick, setTick] = useState(Date.now());
+    const [clockedIn, setClockedIn] = useState(false);
+    const [clockInTime, setClockInTime] = useState(null);
+    const [todayHours, setTodayHours] = useState(0);
+    const [activeRo, setActiveRo] = useState(null);
+    const [myJobs, setMyJobs] = useState([]);
+
+    useEffect(() => {
+        const t = setInterval(() => setTick(Date.now()), 1000);
+        return () => clearInterval(t);
+    }, []);
+
+    useEffect(() => {
+        if (user.employee_id) {
+            api('/time-cards?employee_id=' + user.employee_id).then(cards => {
+                const today = new Date().toISOString().slice(0, 10);
+                const todayCards = cards.filter(c => c.clock_in && c.clock_in.startsWith(today));
+                const openCard = todayCards.find(c => !c.clock_out);
+                if (openCard) {
+                    setClockedIn(true);
+                    setClockInTime(new Date(openCard.clock_in));
+                    setActiveRo(openCard.ro_id);
+                }
+                const hours = todayCards.reduce((sum, c) => sum + (c.hours_worked || 0), 0);
+                setTodayHours(hours);
+            }).catch(() => {});
+        }
+    }, [user.employee_id]);
+
+    useEffect(() => {
+        api('/repair-orders?status=in_progress').then(ros => {
+            const mine = ros.filter(ro =>
+                ro.technician_id === user.employee_id ||
+                ro.painter_id === user.employee_id
+            );
+            setMyJobs(mine);
+        }).catch(() => {});
+    }, [user.employee_id]);
+
+    const handleClockIn = async (roId = null) => {
+        try {
+            const body = {
+                employee_id: user.employee_id,
+                clock_in: new Date().toISOString().replace('T', ' ').slice(0, 19),
+                activity_type: 'production',
+            };
+            if (roId) body.ro_id = roId;
+            await api('/time-cards', { method: 'POST', body });
+            setClockedIn(true);
+            setClockInTime(new Date());
+            setActiveRo(roId);
+        } catch (err) {
+            alert('Clock in failed: ' + err.message);
+        }
+    };
+
+    const handleClockOut = async () => {
+        try {
+            const cards = await api('/time-cards?employee_id=' + user.employee_id);
+            const openCard = cards.find(c => !c.clock_out);
+            if (openCard) {
+                const now = new Date();
+                const cIn = new Date(openCard.clock_in);
+                const hours = ((now - cIn) / 3600000).toFixed(2);
+                await api(`/time-cards/${openCard.id}`, {
+                    method: 'PUT',
+                    body: {
+                        clock_out: now.toISOString().replace('T', ' ').slice(0, 19),
+                        hours_worked: parseFloat(hours),
+                    }
+                });
+            }
+            const addedHrs = clockInTime ? ((new Date() - clockInTime) / 3600000) : 0;
+            setClockedIn(false);
+            setClockInTime(null);
+            setActiveRo(null);
+            setTodayHours(prev => prev + addedHrs);
+        } catch (err) {
+            alert('Clock out failed: ' + err.message);
+        }
+    };
+
+    const elapsed = clockedIn && clockInTime ? Math.floor((tick - clockInTime.getTime()) / 1000) : 0;
+    const elapsedStr = `${Math.floor(elapsed/3600)}:${String(Math.floor((elapsed%3600)/60)).padStart(2,'0')}:${String(elapsed%60).padStart(2,'0')}`;
+
+    return (
+        <div style={{textAlign: 'center', padding: '16px 0'}}>
+
+            {/* Clocked IN state: big elapsed timer */}
+            {clockedIn ? (
+                <div>
+                    <div style={{fontSize: 16, color: '#22c55e', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8}}>
+                        <i className="fas fa-circle" style={{fontSize: 12, marginRight: 8, animation: 'pulse 2s infinite'}}></i> Clocked In
+                    </div>
+                    <div style={{fontSize: 72, fontWeight: 800, fontFamily: 'monospace', color: '#fff', letterSpacing: 4, margin: '16px 0 24px'}}>
+                        {elapsedStr}
+                    </div>
+                    {activeRo && <div style={{fontSize: 16, color: 'var(--text-muted)', marginBottom: 16}}>
+                        Working on RO #{activeRo}
+                    </div>}
+                    <button className="touch-btn touch-btn-danger" onClick={handleClockOut} style={{minWidth: 280}}>
+                        <i className="fas fa-stop"></i> Clock Out
+                    </button>
+                </div>
+            ) : (
+                /* Clocked OUT state: big clock-in button */
+                <div>
+                    <div style={{fontSize: 16, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 24}}>
+                        <i className="far fa-circle" style={{fontSize: 12, marginRight: 8}}></i> Not Clocked In
+                    </div>
+                    <button className="touch-btn touch-btn-success" onClick={() => handleClockIn()} style={{minWidth: 280, marginBottom: 24}}>
+                        <i className="fas fa-play"></i> Clock In
+                    </button>
+
+                    {/* Quick clock-in to a specific job */}
+                    {myJobs.length > 0 && (
+                        <div style={{marginTop: 16}}>
+                            <div style={{fontSize: 14, color: 'var(--text-muted)', marginBottom: 12}}>Or clock in to a specific job:</div>
+                            <div style={{display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center'}}>
+                                {myJobs.map(job => (
+                                    <button key={job.id} className="touch-btn touch-btn-primary" style={{minWidth: 200, fontSize: 16}}
+                                            onClick={() => handleClockIn(job.id)}>
+                                        <i className="fas fa-play"></i> {job.ro_number}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Today's total hours */}
+            <div style={{marginTop: 32, padding: '16px 24px', background: 'var(--bg-card)', borderRadius: 12, display: 'inline-block', border: '1px solid var(--border)'}}>
+                <div style={{fontSize: 14, color: 'var(--text-muted)', marginBottom: 4}}>Today's Total</div>
+                <div style={{fontSize: 32, fontWeight: 700, fontFamily: 'monospace', color: 'var(--primary)'}}>
+                    {(todayHours + (clockedIn ? elapsed/3600 : 0)).toFixed(1)}h
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// WORKER VIEW — touch-friendly tabs + header
+// ═══════════════════════════════════════════════════════════
+function WorkerView({ user, onLogout }) {
+    const [workerTab, setWorkerTab] = useState('clock');
+
+    return (
+        <div style={{minHeight: '100vh', background: 'var(--bg)'}}>
+            <div className="worker-header">
+                <h1><i className="fas fa-truck"></i> TecStation</h1>
+                <div className="flex items-center gap-2">
+                    <span style={{fontSize: 16, color: 'var(--text-muted)', fontWeight: 600}}>
+                        <i className="fas fa-user-circle"></i> {user.display_name}
+                    </span>
+                    <button className="touch-btn" onClick={onLogout} style={{fontSize: 16, padding: '10px 20px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)'}}>
+                        <i className="fas fa-sign-out-alt"></i> Logout
+                    </button>
+                </div>
+            </div>
+            <div className="worker-tabs">
+                <div className={`worker-tab ${workerTab === 'clock' ? 'active' : ''}`}
+                     onClick={() => setWorkerTab('clock')}>
+                    <i className="fas fa-clock"></i> Time Clock
+                </div>
+                <div className={`worker-tab ${workerTab === 'my-jobs' ? 'active' : ''}`}
+                     onClick={() => setWorkerTab('my-jobs')}>
+                    <i className="fas fa-wrench"></i> My Jobs
+                </div>
+                <div className={`worker-tab ${workerTab === 'board' ? 'active' : ''}`}
+                     onClick={() => setWorkerTab('board')}>
+                    <i className="fas fa-columns"></i> Shop Board
+                </div>
+            </div>
+            <div className="worker-main" style={{maxWidth: workerTab === 'board' ? '100%' : '900px'}}>
+                {workerTab === 'clock' && <TimeClock user={user} />}
+                {workerTab === 'my-jobs' && <MyJobsView user={user} />}
+                {workerTab === 'board' && <ShopBoardView user={user} />}
+            </div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// MY JOBS — touch-optimized with large move buttons
+// ═══════════════════════════════════════════════════════════
+function MyJobsView({ user }) {
+    const [jobs, setJobs] = useState([]);
+    const [moving, setMoving] = useState(null);
+
+    const load = () => {
+        if (user.employee_id) {
+            api(`/tecstation/my-jobs/${user.employee_id}`).then(setJobs).catch(console.error);
+        }
+    };
+    useEffect(() => { load(); }, [user.employee_id]);
+
+    const deptColors = {
+        lot: '#94a3b8', body: '#3b82f6', frame: '#8b5cf6', mechanical: '#f97316',
+        paint: '#eab308', detail: '#22c55e', assembly: '#06b6d4', glass: '#a855f7',
+        qa: '#ec4899', ready: '#10b981', delivered: '#6b7280'
+    };
+    const deptLabels = {
+        lot:'Lot', body:'Body', frame:'Frame', mechanical:'Mechanical',
+        paint:'Paint', detail:'Detail', assembly:'Assembly', glass:'Glass',
+        qa:'QA', ready:'Ready', delivered:'Delivered'
+    };
+    const DEPTS = ['lot','body','frame','mechanical','paint','detail','assembly','glass','qa','ready','delivered'];
+
+    const moveVehicle = async (roId, toDept) => {
+        try {
+            await api('/tecstation/move', {
+                method: 'POST',
+                body: { ro_id: roId, to_department: toDept, moved_by: user.employee_id }
+            });
+            setMoving(null);
+            load();
+        } catch (err) {
+            alert(err.message);
+        }
+    };
+
+    return (
+        <div>
+            <div className="page-header" style={{marginBottom: 16}}>
+                <h2 style={{fontSize: 22}}>My Assigned Jobs</h2>
+                <button className="touch-btn" onClick={load} style={{fontSize: 16, padding: '10px 20px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)'}}>
+                    <i className="fas fa-sync"></i> Refresh
+                </button>
+            </div>
+            {jobs.length === 0 ? (
+                <div className="empty-state"><i className="fas fa-inbox"></i><div style={{fontSize: 18}}>No jobs assigned to you right now</div></div>
+            ) : jobs.map(job => (
+                <div className="job-card" key={job.id} style={{padding: 20, marginBottom: 16, borderRadius: 12}}>
+                    <div className="job-header" style={{marginBottom: 12}}>
+                        <span className="job-title" style={{fontSize: 22}}>{job.ro_number}</span>
+                        <div className="flex items-center gap-2">
+                            <span className="badge" style={{background: `${deptColors[job.current_department]}22`, color: deptColors[job.current_department], fontSize: 14, padding: '6px 12px'}}>
+                                {deptLabels[job.current_department] || job.current_department}
+                            </span>
+                        </div>
+                    </div>
+                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12, fontSize: 16}}>
+                        <span><i className="fas fa-truck" style={{width: 20}}></i> {[job.year, job.make, job.model].filter(Boolean).join(' ')}</span>
+                        <span><i className="fas fa-palette" style={{width: 20}}></i> {job.color || '—'}</span>
+                        <span><i className="fas fa-id-card" style={{width: 20}}></i> {job.license_plate || '—'}</span>
+                        <span><i className="fas fa-calendar" style={{width: 20}}></i> Target: {fmtDate(job.target_delivery_date)}</span>
+                    </div>
+
+                    {/* Move vehicle — large touch buttons */}
+                    {moving === job.id ? (
+                        <div style={{marginTop: 12}}>
+                            <div style={{fontSize: 16, color: 'var(--text-muted)', marginBottom: 10, fontWeight: 600}}>Move to department:</div>
+                            <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10}}>
+                                {DEPTS.filter(d => d !== job.current_department).map(d => (
+                                    <button key={d} className="touch-move-btn" onClick={() => moveVehicle(job.id, d)}
+                                            style={{borderColor: deptColors[d], color: deptColors[d]}}>
+                                        {deptLabels[d]}
+                                    </button>
+                                ))}
+                            </div>
+                            <button className="touch-btn" onClick={() => setMoving(null)}
+                                    style={{marginTop: 10, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', width: '100%'}}>
+                                Cancel
+                            </button>
+                        </div>
+                    ) : (
+                        <button className="touch-btn touch-btn-primary" style={{width: '100%', marginTop: 4}} onClick={() => setMoving(job.id)}>
+                            <i className="fas fa-arrow-right"></i> Move Vehicle
+                        </button>
+                    )}
+
+                    {/* Line items */}
+                    {job.my_lines && job.my_lines.length > 0 && (
+                        <div style={{marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 12}}>
+                            <div style={{fontSize: 13, color: 'var(--text-muted)', marginBottom: 6, textTransform: 'uppercase', fontWeight: 600}}>Operations</div>
+                            {job.my_lines.map(line => (
+                                <div key={line.id} style={{fontSize: 15, padding: '6px 0', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border)'}}>
+                                    <span>{line.line_number}. {line.description}</span>
+                                    <span style={{color: 'var(--text-muted)', fontWeight: 600}}>{line.labor_hours || line.paint_hours || 0}h</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// SHOP BOARD — touch-friendly Kanban
+// ═══════════════════════════════════════════════════════════
+function ShopBoardView({ user }) {
+    const [board, setBoard] = useState(null);
+    const [moving, setMoving] = useState(null);
+
+    const load = () => api('/tecstation/board').then(setBoard).catch(console.error);
+    useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t); }, []);
+
+    const deptColors = {
+        lot: '#94a3b8', body: '#3b82f6', frame: '#8b5cf6', mechanical: '#f97316',
+        paint: '#eab308', detail: '#22c55e', assembly: '#06b6d4', glass: '#a855f7',
+        qa: '#ec4899', ready: '#10b981', delivered: '#6b7280'
+    };
+    const deptLabels = {
+        lot:'Lot', body:'Body', frame:'Frame', mechanical:'Mechanical',
+        paint:'Paint', detail:'Detail', assembly:'Assembly', glass:'Glass',
+        qa:'QA', ready:'Ready', delivered:'Delivered'
+    };
+    const DEPTS = ['lot','body','frame','mechanical','paint','detail','assembly','glass','qa','ready'];
+
+    const moveVehicle = async (roId, toDept) => {
+        try {
+            await api('/tecstation/move', {
+                method: 'POST',
+                body: { ro_id: roId, to_department: toDept, moved_by: user.employee_id }
+            });
+            setMoving(null);
+            load();
+        } catch (err) { alert(err.message); }
+    };
+
+    if (!board) return <div className="empty-state"><i className="fas fa-spinner fa-spin" style={{fontSize: 32}}></i></div>;
+
+    return (
+        <div>
+            <div className="page-header" style={{marginBottom: 16}}>
+                <h2 style={{fontSize: 22}}>Shop Board</h2>
+                <button className="touch-btn" onClick={load} style={{fontSize: 16, padding: '10px 20px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)'}}>
+                    <i className="fas fa-sync"></i> Refresh
+                </button>
+            </div>
+            <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14, padding: '0 8px'}}>
+                {DEPTS.map(dept => (
+                    <div key={dept} style={{background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden'}}>
+                        <div style={{padding: '12px 16px', background: `${deptColors[dept]}15`, borderBottom: `3px solid ${deptColors[dept]}`,
+                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+                            <span style={{fontWeight: 700, fontSize: 16, color: deptColors[dept]}}>{deptLabels[dept]}</span>
+                            <span style={{fontSize: 14, color: 'var(--text-muted)', background: 'var(--bg)', padding: '4px 10px', borderRadius: 6, fontWeight: 700}}>
+                                {(board[dept] || []).length}
+                            </span>
+                        </div>
+                        <div style={{padding: 10, minHeight: 80}}>
+                            {(board[dept] || []).map(v => (
+                                <div key={v.id} style={{background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 12, marginBottom: 8, fontSize: 14,
+                                    borderLeft: v.priority === 'rush' ? '4px solid var(--red)' : v.priority === 'high' ? '4px solid var(--orange)' : '4px solid transparent'}}>
+                                    <div style={{fontWeight: 700, color: 'var(--primary)', fontSize: 16}}>{v.ro_number}</div>
+                                    <div style={{color: 'var(--text-muted)', fontSize: 14}}>{[v.year, v.make, v.model].filter(Boolean).join(' ')}</div>
+                                    <div style={{color: 'var(--text-muted)', fontSize: 14}}>{v.color}</div>
+                                    {v.target_delivery_date && <div style={{fontSize: 13, marginTop: 4}}>
+                                        <i className="fas fa-calendar" style={{fontSize: 11}}></i> {fmtDate(v.target_delivery_date)}
+                                    </div>}
+                                    {moving === `${v.id}-${dept}` ? (
+                                        <div style={{marginTop: 8}}>
+                                            <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6}}>
+                                                {DEPTS.filter(d => d !== dept).map(d => (
+                                                    <button key={d} className="touch-move-btn" style={{borderColor: deptColors[d], color: deptColors[d], padding: '8px 4px', fontSize: 12}}
+                                                            onClick={() => moveVehicle(v.id, d)}>
+                                                        {deptLabels[d]}
+                                                    </button>
+                                                ))}
+                                                <button className="touch-move-btn" style={{borderColor: deptColors.delivered, color: deptColors.delivered, padding: '8px 4px', fontSize: 12}}
+                                                        onClick={() => moveVehicle(v.id, 'delivered')}>
+                                                    Delivered
+                                                </button>
+                                            </div>
+                                            <button style={{marginTop: 6, width: '100%', padding: '6px', background: 'transparent',
+                                                border: '1px solid var(--border)', color: 'var(--text-muted)', borderRadius: 6, cursor: 'pointer', fontSize: 12}}
+                                                onClick={() => setMoving(null)}>Cancel</button>
+                                        </div>
+                                    ) : (
+                                        <button className="touch-move-btn" style={{marginTop: 8, width: '100%', borderColor: deptColors[dept], color: deptColors[dept]}}
+                                            onClick={() => setMoving(`${v.id}-${dept}`)}>
+                                            <i className="fas fa-arrow-right"></i> Move
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                            {(board[dept] || []).length === 0 && (
+                                <div style={{textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: 13}}>Empty</div>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// ADMIN / OFFICE VIEW (full app with sidebar)
+// ═══════════════════════════════════════════════════════════
+function AdminView({ user, onLogout }) {
+    const [page, setPage] = useState('dashboard');
+    const [detailId, setDetailId] = useState(null);
+
+    const navigate = (target, id = null) => {
+        setPage(target);
+        setDetailId(id);
+        window.scrollTo(0, 0);
+    };
+
+    const sidebarPage = page.includes('detail') ? page.replace(/-detail$/, 's').replace('est-detail', 'estimates').replace('ro-detail', 'repair-orders').replace('customer-details', 'customers') :
+                         page === 'est-new' ? 'estimates' : page;
+
+    let content;
+    switch (page) {
+        case 'dashboard': content = <Dashboard navigate={navigate} />; break;
+        case 'customers': content = <CustomersPage navigate={navigate} />; break;
+        case 'customer-detail': content = <CustomerDetail id={detailId} navigate={navigate} />; break;
+        case 'vehicles': content = <VehiclesPage navigate={navigate} />; break;
+        case 'estimates': content = <EstimatesPage navigate={navigate} />; break;
+        case 'est-new': content = <NewEstimate navigate={navigate} />; break;
+        case 'est-detail': content = <EstimateDetail id={detailId} navigate={navigate} />; break;
+        case 'repair-orders': content = <RepairOrdersPage navigate={navigate} />; break;
+        case 'ro-detail': content = <RODetail id={detailId} navigate={navigate} />; break;
+        case 'insurance': content = <InsurancePage navigate={navigate} />; break;
+        case 'employees': content = <EmployeesPage navigate={navigate} />; break;
+        case 'vendors': content = <VendorsPage navigate={navigate} />; break;
+        case 'production': content = <ProductionPage navigate={navigate} />; break;
+        case 'reports': content = <ReportsPage />; break;
+        case 'settings': content = <SettingsPage />; break;
+        default: content = <Dashboard navigate={navigate} />;
+    }
+
+    return (
+        <div className="app">
+            <Sidebar page={sidebarPage} setPage={p => navigate(p)} user={user} onLogout={onLogout} />
+            <div className="main">{content}</div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// APP ROOT — routes workers to touch login, admin to standard
+// ═══════════════════════════════════════════════════════════
+function App() {
+    const [user, setUser] = useState(null);
+    const [checking, setChecking] = useState(true);
+    const [loginMode, setLoginMode] = useState('touch'); // 'touch' or 'admin'
+
+    // On mount, check if we have a valid token
+    useEffect(() => {
+        if (_authToken) {
+            api('/auth/me').then(u => {
+                setUser(u);
+                setChecking(false);
+            }).catch(() => {
+                setAuthToken(null);
+                setChecking(false);
+            });
+        } else {
+            setChecking(false);
+        }
+    }, []);
+
+    // Listen for auth expiry events
+    useEffect(() => {
+        const handler = () => { setUser(null); };
+        window.addEventListener('auth-expired', handler);
+        return () => window.removeEventListener('auth-expired', handler);
+    }, []);
+
+    const handleLogin = (result) => {
+        setUser({
+            id: result.user_id,
+            username: result.username,
+            display_name: result.display_name,
+            role: result.role,
+            employee_id: result.employee_id,
+        });
+    };
+
+    const handleLogout = () => {
+        api('/auth/logout', { method: 'POST' }).catch(() => {});
+        setAuthToken(null);
+        setUser(null);
+        setLoginMode('touch');
+    };
+
+    if (checking) {
+        return <div className="login-container"><div className="login-box"><i className="fas fa-spinner fa-spin" style={{fontSize: 32, color: 'var(--primary)'}}></i></div></div>;
+    }
+
+    if (!user) {
+        if (loginMode === 'admin') {
+            return <LoginScreen onLogin={handleLogin} onBack={() => setLoginMode('touch')} />;
+        }
+        return <TouchLoginScreen onLogin={handleLogin} onAdminLogin={() => setLoginMode('admin')} />;
+    }
+
+    // Workers get the touch-friendly TecStation
+    if (user.role === 'worker') {
+        return <WorkerView user={user} onLogout={handleLogout} />;
+    }
+
+    // Admin and office users get the full app
+    return <AdminView user={user} onLogout={handleLogout} />;
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>
