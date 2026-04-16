@@ -621,6 +621,84 @@ function VehiclesPage({ navigate }) {
 }
 
 // ═══════════════════════════════════════════════════════════
+// VEHICLE DETAIL
+// ═══════════════════════════════════════════════════════════
+function VehicleDetail({ id, navigate }) {
+    const [v, setV] = useState(null);
+    const [editing, setEditing] = useState(false);
+    const [form, setForm] = useState({});
+
+    const load = () => api(`/vehicles/${id}`).then(data => { setV(data); setForm(data); });
+    useEffect(() => { load(); }, [id]);
+
+    const save = async () => {
+        const body = {
+            customer_id: form.customer_id,
+            vin: form.vin || null, year: form.year ? parseInt(form.year) : null,
+            make: form.make || null, model: form.model || null, submodel: form.submodel || null,
+            color: form.color || null, license_plate: form.license_plate || null,
+            license_state: form.license_state || null,
+            mileage: form.mileage ? parseInt(form.mileage) : null, notes: form.notes || null
+        };
+        await api(`/vehicles/${id}`, { method: 'PUT', body });
+        setEditing(false); load();
+    };
+
+    if (!v) return <div className="empty-state"><i className="fas fa-spinner fa-spin"></i></div>;
+
+    return (
+        <div>
+            <div className="page-header">
+                <div className="flex items-center gap-2">
+                    <button className="btn btn-outline btn-sm" onClick={() => navigate('vehicles')}><i className="fas fa-arrow-left"></i></button>
+                    <h2>{vehDesc(v)}</h2>
+                </div>
+                <button className="btn btn-primary" onClick={() => setEditing(true)}><i className="fas fa-edit"></i> Edit</button>
+            </div>
+            <div className="detail-grid">
+                <div className="card">
+                    <div className="section-title"><i className="fas fa-car"></i> Vehicle Info</div>
+                    <div className="detail-row"><span className="detail-label">Year</span><span className="detail-value">{v.year||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Make</span><span className="detail-value">{v.make||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Model</span><span className="detail-value">{v.model||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Submodel</span><span className="detail-value">{v.submodel||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Color</span><span className="detail-value">{v.color||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">VIN</span><span className="detail-value">{v.vin||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Plate</span><span className="detail-value">{v.license_plate ? `${v.license_plate} (${v.license_state||'—'})` : '—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Mileage</span><span className="detail-value">{v.mileage ? v.mileage.toLocaleString() : '—'}</span></div>
+                </div>
+                <div className="card">
+                    <div className="section-title"><i className="fas fa-user"></i> Owner</div>
+                    <div className="detail-row clickable" onClick={() => navigate('customer-detail', v.customer_id)}>
+                        <span className="detail-value">{custName(v)}</span>
+                        <span className="text-muted text-sm">{v.phone_home||''}</span>
+                    </div>
+                    {v.notes && <>
+                        <div className="section-title" style={{marginTop:16}}><i className="fas fa-sticky-note"></i> Notes</div>
+                        <div className="text-muted" style={{fontSize:13,whiteSpace:'pre-wrap'}}>{v.notes}</div>
+                    </>}
+                </div>
+            </div>
+            <Modal open={editing} onClose={() => setEditing(false)} title="Edit Vehicle">
+                <div className="form-grid">
+                    <div className="form-group"><label>Year</label><input type="number" value={form.year||''} onChange={e => setForm({...form, year: e.target.value})} /></div>
+                    <div className="form-group"><label>Make</label><input value={form.make||''} onChange={e => setForm({...form, make: e.target.value})} /></div>
+                    <div className="form-group"><label>Model</label><input value={form.model||''} onChange={e => setForm({...form, model: e.target.value})} /></div>
+                    <div className="form-group"><label>Submodel</label><input value={form.submodel||''} onChange={e => setForm({...form, submodel: e.target.value})} /></div>
+                    <div className="form-group"><label>VIN</label><input value={form.vin||''} onChange={e => setForm({...form, vin: e.target.value})} /></div>
+                    <div className="form-group"><label>Color</label><input value={form.color||''} onChange={e => setForm({...form, color: e.target.value})} /></div>
+                    <div className="form-group"><label>License Plate</label><input value={form.license_plate||''} onChange={e => setForm({...form, license_plate: e.target.value})} /></div>
+                    <div className="form-group"><label>License State</label><input value={form.license_state||''} onChange={e => setForm({...form, license_state: e.target.value})} maxLength="2" /></div>
+                    <div className="form-group"><label>Mileage</label><input type="number" value={form.mileage||''} onChange={e => setForm({...form, mileage: e.target.value})} /></div>
+                </div>
+                <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={form.notes||''} onChange={e => setForm({...form, notes: e.target.value})} /></div>
+                <div className="modal-actions"><button className="btn btn-outline" onClick={() => setEditing(false)}>Cancel</button><button className="btn btn-primary" onClick={save}><i className="fas fa-save"></i> Save</button></div>
+            </Modal>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
 // ESTIMATES LIST
 // ═══════════════════════════════════════════════════════════
 function EstimatesPage({ navigate }) {
@@ -1504,43 +1582,59 @@ function InsurancePage({ navigate }) {
 function EmployeesPage({ navigate }) {
     const [employees, setEmployees] = useState([]);
     const [showForm, setShowForm] = useState(false);
-    const emptyEmp = {employee_code:'',first_name:'',last_name:'',role:'technician',email:'',phone:'',hourly_rate:'',flag_rate:'',hire_date:'',notes:''};
+    const [editId, setEditId] = useState(null);
+    const emptyEmp = {employee_code:'',first_name:'',last_name:'',role:'technician',email:'',phone:'',hourly_rate:'',flag_rate:'',hire_date:'',notes:'',is_active:1};
     const [form, setForm] = useState(emptyEmp);
 
     const load = () => api('/employees').then(setEmployees);
     useEffect(() => { load(); }, []);
 
+    const openNew = () => { setEditId(null); setForm(emptyEmp); setShowForm(true); };
+    const openEdit = (emp) => {
+        setEditId(emp.id);
+        setForm({
+            employee_code: emp.employee_code||'', first_name: emp.first_name||'', last_name: emp.last_name||'',
+            role: emp.role||'technician', email: emp.email||'', phone: emp.phone||'',
+            hourly_rate: emp.hourly_rate||'', flag_rate: emp.flag_rate||'',
+            hire_date: emp.hire_date||'', notes: emp.notes||'', is_active: emp.is_active != null ? emp.is_active : 1
+        });
+        setShowForm(true);
+    };
+
     const save = async () => {
         const body = {...form};
-        if (body.hourly_rate) body.hourly_rate = parseFloat(body.hourly_rate);
-        if (body.flag_rate) body.flag_rate = parseFloat(body.flag_rate);
+        if (body.hourly_rate !== '' && body.hourly_rate != null) body.hourly_rate = parseFloat(body.hourly_rate);
+        if (body.flag_rate !== '' && body.flag_rate != null) body.flag_rate = parseFloat(body.flag_rate);
+        body.is_active = body.is_active ? 1 : 0;
         if (!body.employee_code) body.employee_code = (body.first_name[0]||'')+(body.last_name||'').toUpperCase().slice(0,3)+(Math.floor(Math.random()*90)+10);
-        await api('/employees', { method: 'POST', body });
-        setShowForm(false); setForm(emptyEmp); load();
+        if (editId) await api(`/employees/${editId}`, { method: 'PUT', body });
+        else await api('/employees', { method: 'POST', body });
+        setShowForm(false); setEditId(null); setForm(emptyEmp); load();
     };
 
     return (
         <div>
             <div className="page-header">
                 <h2>Employees</h2>
-                <button className="btn btn-primary" onClick={() => setShowForm(true)}><i className="fas fa-plus"></i> New Employee</button>
+                <button className="btn btn-primary" onClick={openNew}><i className="fas fa-plus"></i> New Employee</button>
             </div>
             <div className="card"><div className="table-wrapper">
-                <table><thead><tr><th>Code</th><th>Name</th><th>Role</th><th>Hourly Rate</th><th>Flag Rate</th><th>Status</th></tr></thead>
+                <table><thead><tr><th>Code</th><th>Name</th><th>Role</th><th>Hourly Rate</th><th>Flag Rate</th><th>Status</th><th></th></tr></thead>
                 <tbody>{employees.map(e => (
-                    <tr key={e.id}>
+                    <tr key={e.id} className="clickable" onClick={() => openEdit(e)}>
                         <td style={{fontWeight:600}}>{e.employee_code}</td>
                         <td>{e.first_name} {e.last_name}</td>
                         <td><Badge status={e.role}/></td>
                         <td className="money">{e.hourly_rate > 0 ? fmt(e.hourly_rate) : '—'}</td>
                         <td className="money">{e.flag_rate > 0 ? fmt(e.flag_rate) : '—'}</td>
                         <td>{e.is_active ? <span className="text-green">Active</span> : <span className="text-red">Inactive</span>}</td>
+                        <td style={{textAlign:'right'}}><i className="fas fa-edit text-muted"></i></td>
                     </tr>
                 ))}
-                {!employees.length && <tr><td colSpan="6" className="text-muted" style={{textAlign:'center',padding:32}}>No employees found</td></tr>}
+                {!employees.length && <tr><td colSpan="7" className="text-muted" style={{textAlign:'center',padding:32}}>No employees found</td></tr>}
                 </tbody></table>
             </div></div>
-            <Modal open={showForm} onClose={() => setShowForm(false)} title="New Employee">
+            <Modal open={showForm} onClose={() => setShowForm(false)} title={editId ? 'Edit Employee' : 'New Employee'}>
                 <div className="form-grid">
                     <div className="form-group"><label>First Name *</label><input value={form.first_name} onChange={e => setForm({...form, first_name: e.target.value})} /></div>
                     <div className="form-group"><label>Last Name *</label><input value={form.last_name} onChange={e => setForm({...form, last_name: e.target.value})} /></div>
@@ -1558,9 +1652,14 @@ function EmployeesPage({ navigate }) {
                     <div className="form-group"><label>Hourly Rate</label><input type="number" step="0.01" value={form.hourly_rate} onChange={e => setForm({...form, hourly_rate: e.target.value})} placeholder="0.00" /></div>
                     <div className="form-group"><label>Flag Rate</label><input type="number" step="0.01" value={form.flag_rate} onChange={e => setForm({...form, flag_rate: e.target.value})} placeholder="0.00" /></div>
                     <div className="form-group"><label>Hire Date</label><input type="date" value={form.hire_date} onChange={e => setForm({...form, hire_date: e.target.value})} /></div>
+                    <div className="form-group"><label>Status</label>
+                        <select value={form.is_active} onChange={e => setForm({...form, is_active: parseInt(e.target.value)})}>
+                            <option value={1}>Active</option><option value={0}>Inactive</option>
+                        </select>
+                    </div>
                 </div>
                 <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} /></div>
-                <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={!form.first_name||!form.last_name}><i className="fas fa-save"></i> Save</button></div>
+                <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={!form.first_name||!form.last_name}><i className="fas fa-save"></i> {editId ? 'Update' : 'Save'}</button></div>
             </Modal>
         </div>
     );
@@ -1573,33 +1672,52 @@ function VendorsPage({ navigate }) {
     const [vendors, setVendors] = useState([]);
     const [search, setSearch] = useState('');
     const [showForm, setShowForm] = useState(false);
+    const [editId, setEditId] = useState(null);
     const emptyVnd = {vendor_name:'',vendor_type:'parts',contact_name:'',phone:'',email:'',fax:'',address:'',city:'',state:'',zip_code:'',account_number:'',notes:''};
     const [form, setForm] = useState(emptyVnd);
 
     const load = () => api('/vendors' + (search ? `?search=${search}` : '')).then(setVendors);
     useEffect(() => { load(); }, [search]);
 
+    const openNew = () => { setEditId(null); setForm(emptyVnd); setShowForm(true); };
+    const openEdit = (vnd) => {
+        setEditId(vnd.id);
+        setForm({
+            vendor_name: vnd.vendor_name||'', vendor_type: vnd.vendor_type||'parts',
+            contact_name: vnd.contact_name||'', phone: vnd.phone||'', email: vnd.email||'',
+            fax: vnd.fax||'', address: vnd.address||'', city: vnd.city||'',
+            state: vnd.state||'', zip_code: vnd.zip_code||'',
+            account_number: vnd.account_number||'', notes: vnd.notes||''
+        });
+        setShowForm(true);
+    };
+
     const save = async () => {
-        await api('/vendors', { method: 'POST', body: form });
-        setShowForm(false); setForm(emptyVnd); load();
+        if (editId) await api(`/vendors/${editId}`, { method: 'PUT', body: form });
+        else await api('/vendors', { method: 'POST', body: form });
+        setShowForm(false); setEditId(null); setForm(emptyVnd); load();
     };
 
     return (
         <div>
             <div className="page-header">
                 <h2>Vendors</h2>
-                <button className="btn btn-primary" onClick={() => setShowForm(true)}><i className="fas fa-plus"></i> New Vendor</button>
+                <button className="btn btn-primary" onClick={openNew}><i className="fas fa-plus"></i> New Vendor</button>
             </div>
             <div className="search-bar"><input placeholder="Search vendors..." value={search} onChange={e => setSearch(e.target.value)} /></div>
             <div className="card"><div className="table-wrapper">
-                <table><thead><tr><th>Vendor</th><th>Type</th><th>Contact</th><th>Phone</th><th>City</th></tr></thead>
+                <table><thead><tr><th>Vendor</th><th>Type</th><th>Contact</th><th>Phone</th><th>City</th><th></th></tr></thead>
                 <tbody>{vendors.map(v => (
-                    <tr key={v.id}><td style={{fontWeight:500}}>{v.vendor_name}</td><td><Badge status={v.vendor_type}/></td><td>{v.contact_name||'—'}</td><td>{v.phone||'—'}</td><td>{v.city||'—'}</td></tr>
+                    <tr key={v.id} className="clickable" onClick={() => openEdit(v)}>
+                        <td style={{fontWeight:500}}>{v.vendor_name}</td><td><Badge status={v.vendor_type}/></td>
+                        <td>{v.contact_name||'—'}</td><td>{v.phone||'—'}</td><td>{v.city||'—'}</td>
+                        <td style={{textAlign:'right'}}><i className="fas fa-edit text-muted"></i></td>
+                    </tr>
                 ))}
-                {!vendors.length && <tr><td colSpan="5" className="text-muted" style={{textAlign:'center',padding:32}}>No vendors found</td></tr>}
+                {!vendors.length && <tr><td colSpan="6" className="text-muted" style={{textAlign:'center',padding:32}}>No vendors found</td></tr>}
                 </tbody></table>
             </div></div>
-            <Modal open={showForm} onClose={() => setShowForm(false)} title="New Vendor">
+            <Modal open={showForm} onClose={() => setShowForm(false)} title={editId ? 'Edit Vendor' : 'New Vendor'}>
                 <div className="form-grid">
                     <div className="form-group"><label>Vendor Name *</label><input value={form.vendor_name} onChange={e => setForm({...form, vendor_name: e.target.value})} /></div>
                     <div className="form-group"><label>Type</label>
@@ -1620,7 +1738,7 @@ function VendorsPage({ navigate }) {
                     <div className="form-group"><label>ZIP</label><input value={form.zip_code} onChange={e => setForm({...form, zip_code: e.target.value})} /></div>
                 </div>
                 <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} /></div>
-                <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={!form.vendor_name}><i className="fas fa-save"></i> Save</button></div>
+                <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={!form.vendor_name}><i className="fas fa-save"></i> {editId ? 'Update' : 'Save'}</button></div>
             </Modal>
         </div>
     );
@@ -1673,7 +1791,7 @@ function ReportsPage() {
     const [arData, setArData] = useState([]);
     const [empData, setEmpData] = useState([]);
     const [partsData, setPartsData] = useState([]);
-    const [cycleData, setCycleData] = useState([]);
+    const [cycleData, setCycleData] = useState(null);
 
     useEffect(() => {
         if (tab === 'production') api('/reports/production-summary').then(setProdData);
@@ -1740,21 +1858,16 @@ function ReportsPage() {
                 </div></div>
             )}
 
-            {tab === 'cycle' && (
-                <div className="card"><div className="table-wrapper">
-                    <table><thead><tr><th>RO #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Keys-to-Keys</th><th>Repair Days</th><th>vs Target</th></tr></thead>
-                    <tbody>{cycleData.map(r => (
-                        <tr key={r.ro_number}>
-                            <td style={{color:'var(--primary)'}}>{r.ro_number}</td><td>{custName(r)}</td><td>{vehDesc(r)}</td>
-                            <td><Badge status={r.status}/></td>
-                            <td>{r.keys_to_keys_days != null ? `${Math.round(r.keys_to_keys_days)} days` : '—'}</td>
-                            <td>{r.repair_days != null ? `${Math.round(r.repair_days)} days` : '—'}</td>
-                            <td style={{color: r.days_from_target > 0 ? 'var(--red)' : r.days_from_target != null ? 'var(--green)' : 'inherit'}}>
-                                {r.days_from_target != null ? `${r.days_from_target > 0 ? '+' : ''}${Math.round(r.days_from_target)} days` : '—'}
-                            </td>
-                        </tr>
-                    ))}</tbody></table>
-                </div></div>
+            {tab === 'cycle' && cycleData && (
+                <div className="stats-grid">
+                    <div className="stat-card"><div className="label">Completed ROs</div><div className="value blue">{cycleData.total_completed || 0}</div></div>
+                    <div className="stat-card"><div className="label">Avg Days to Complete</div><div className="value">{cycleData.avg_days_to_complete != null ? `${cycleData.avg_days_to_complete} days` : '—'}</div></div>
+                    <div className="stat-card"><div className="label">Fastest</div><div className="value green">{cycleData.min_days != null ? `${Math.round(cycleData.min_days)} days` : '—'}</div></div>
+                    <div className="stat-card"><div className="label">Slowest</div><div className="value yellow">{cycleData.max_days != null ? `${Math.round(cycleData.max_days)} days` : '—'}</div></div>
+                </div>
+            )}
+            {tab === 'cycle' && cycleData && !cycleData.total_completed && (
+                <div className="card"><div className="text-muted" style={{textAlign:'center',padding:32}}>No completed repair orders yet. Cycle time stats will appear here once ROs are marked complete.</div></div>
             )}
         </div>
     );
@@ -2407,6 +2520,7 @@ function AdminView({ user, onLogout }) {
         case 'customers': content = <CustomersPage navigate={navigate} />; break;
         case 'customer-detail': content = <CustomerDetail id={detailId} navigate={navigate} />; break;
         case 'vehicles': content = <VehiclesPage navigate={navigate} />; break;
+        case 'vehicle-detail': content = <VehicleDetail id={detailId} navigate={navigate} />; break;
         case 'estimates': content = <EstimatesPage navigate={navigate} />; break;
         case 'est-new': content = <NewEstimate navigate={navigate} />; break;
         case 'est-detail': content = <EstimateDetail id={detailId} navigate={navigate} />; break;
