@@ -14,7 +14,7 @@ import os
 
 from config.database import get_connection
 from config.schema import TABLES, INDEXES
-from config.seed import seed_demo_data
+from config.seed import seed_initial_data
 
 from routes import (
     dashboard_router,
@@ -78,7 +78,7 @@ def startup():
     for index_sql in INDEXES:
         cur.execute(index_sql)
     conn.commit()
-    seed_demo_data(conn)
+    seed_initial_data(conn)
     conn.close()
 
 

@@ -627,13 +627,17 @@ function VehicleDetail({ id, navigate }) {
     const [v, setV] = useState(null);
     const [editing, setEditing] = useState(false);
     const [form, setForm] = useState({});
+    const [customers, setCustomers] = useState([]);
+    const [custSearch, setCustSearch] = useState('');
 
     const load = () => api(`/vehicles/${id}`).then(data => { setV(data); setForm(data); });
     useEffect(() => { load(); }, [id]);
+    useEffect(() => { if (editing) api('/customers').then(setCustomers).catch(() => setCustomers([])); }, [editing]);
 
     const save = async () => {
+        if (!form.customer_id) { alert('Please select an owner'); return; }
         const body = {
-            customer_id: form.customer_id,
+            customer_id: parseInt(form.customer_id),
             vin: form.vin || null, year: form.year ? parseInt(form.year) : null,
             make: form.make || null, model: form.model || null, submodel: form.submodel || null,
             color: form.color || null, license_plate: form.license_plate || null,
@@ -643,6 +647,14 @@ function VehicleDetail({ id, navigate }) {
         await api(`/vehicles/${id}`, { method: 'PUT', body });
         setEditing(false); load();
     };
+
+    const filteredCustomers = customers.filter(c => {
+        if (!custSearch) return true;
+        const q = custSearch.toLowerCase();
+        return (c.first_name||'').toLowerCase().includes(q)
+            || (c.last_name||'').toLowerCase().includes(q)
+            || (c.company_name||'').toLowerCase().includes(q);
+    });
 
     if (!v) return <div className="empty-state"><i className="fas fa-spinner fa-spin"></i></div>;
 
@@ -680,6 +692,19 @@ function VehicleDetail({ id, navigate }) {
                 </div>
             </div>
             <Modal open={editing} onClose={() => setEditing(false)} title="Edit Vehicle">
+                <div className="form-group" style={{marginBottom:12}}>
+                    <label>Owner <span style={{color:'var(--danger)'}}>*</span></label>
+                    <input placeholder="Search customers…" value={custSearch} onChange={e => setCustSearch(e.target.value)} style={{marginBottom:4}} />
+                    <select value={form.customer_id||''} onChange={e => setForm({...form, customer_id: e.target.value})}>
+                        <option value="">— Select owner —</option>
+                        {filteredCustomers.map(c => (
+                            <option key={c.id} value={c.id}>
+                                {c.company_name || [c.first_name, c.last_name].filter(Boolean).join(' ') || `Customer #${c.id}`}
+                            </option>
+                        ))}
+                    </select>
+                    <div className="text-muted text-sm" style={{marginTop:4}}>Change this to reassign the vehicle to a different customer.</div>
+                </div>
                 <div className="form-grid">
                     <div className="form-group"><label>Year</label><input type="number" value={form.year||''} onChange={e => setForm({...form, year: e.target.value})} /></div>
                     <div className="form-group"><label>Make</label><input value={form.make||''} onChange={e => setForm({...form, make: e.target.value})} /></div>
