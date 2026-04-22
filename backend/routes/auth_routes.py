@@ -28,6 +28,22 @@ class UserCreateIn(BaseModel):
     employee_id: Optional[int] = None
 
 
+class UserUpdateIn(BaseModel):
+    display_name: Optional[str] = None
+    role: Optional[str] = None
+    employee_id: Optional[int] = None
+    is_active: Optional[int] = None
+
+
+class PinResetIn(BaseModel):
+    pin: str
+
+
+class PinChangeIn(BaseModel):
+    old_pin: str
+    new_pin: str
+
+
 def get_current_user(request: Request) -> dict | None:
     """Extract and validate the session token from request headers."""
     token = request.headers.get("Authorization", "").replace("Bearer ", "")
@@ -116,5 +132,42 @@ def create_user(data: UserCreateIn, request: Request):
     try:
         user_id = service.create_user(data.dict())
         return {"id": user_id, "message": "User created successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/users/{user_id}")
+def update_user(user_id: int, data: UserUpdateIn, request: Request):
+    """Update a user's profile (admin only). Cannot change username or PIN through this endpoint."""
+    user = require_auth(request)
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can update users")
+    try:
+        service.update_user(user_id, data.dict(exclude_unset=True))
+        return {"id": user_id, "message": "User updated successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/users/{user_id}/reset-pin")
+def reset_user_pin(user_id: int, data: PinResetIn, request: Request):
+    """Admin-only: reset a user's PIN without knowing the old one."""
+    user = require_auth(request)
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can reset PINs")
+    try:
+        service.admin_reset_pin(user_id, data.pin)
+        return {"id": user_id, "message": "PIN reset successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/change-pin")
+def change_my_pin(data: PinChangeIn, request: Request):
+    """Self-service: any logged-in user can change their own PIN if they know the current one."""
+    user = require_auth(request)
+    try:
+        service.change_pin(user["id"], data.old_pin, data.new_pin)
+        return {"message": "PIN changed successfully"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

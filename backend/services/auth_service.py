@@ -100,3 +100,29 @@ class AuthService:
             raise ValueError("New PIN must be at least 4 digits")
 
         self.repo.update(user_id, {"pin_hash": self._hash_pin(new_pin)})
+
+    def admin_reset_pin(self, user_id: int, new_pin: str) -> None:
+        """Admin-only: reset a user's PIN without knowing the old one."""
+        user = self.repo.get_by_id(user_id)
+        if not user:
+            raise ValueError("User not found")
+        if not new_pin or len(new_pin) < 4:
+            raise ValueError("New PIN must be at least 4 digits")
+        self.repo.update(user_id, {"pin_hash": self._hash_pin(new_pin)})
+
+    def update_user(self, user_id: int, data: dict) -> None:
+        """
+        Update a user's profile fields (display_name, role, employee_id, is_active).
+        Username and PIN are NOT updated through this method.
+        """
+        user = self.repo.get_by_id(user_id)
+        if not user:
+            raise ValueError("User not found")
+
+        allowed = {"display_name", "role", "employee_id", "is_active"}
+        clean = {k: v for k, v in data.items() if k in allowed and v is not None}
+        if "is_active" in clean:
+            clean["is_active"] = 1 if clean["is_active"] else 0
+        if not clean:
+            return
+        self.repo.update(user_id, clean)
