@@ -3,15 +3,19 @@ PDFService: Generate estimate sheets, invoices, and work orders as PDF.
 Uses ReportLab for PDF generation.
 """
 import io
+import os
 from datetime import datetime
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable, Image
 )
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+
+# Logo bundled with the backend so it's always available, regardless of CWD
+LOGO_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "logo.png")
 
 
 def _fmt(n):
@@ -31,7 +35,7 @@ def _date(d):
 
 
 def _build_header(story, styles, shop, doc_type, doc_number, date_str):
-    """Build common document header with shop info."""
+    """Build common document header: logo on the left, shop info on the right."""
     shop_name = shop.get("shop_name", "Auto Body Shop") if shop else "Auto Body Shop"
     shop_addr = ""
     if shop:
@@ -42,19 +46,39 @@ def _build_header(story, styles, shop, doc_type, doc_number, date_str):
     shop_phone = shop.get("phone", "") if shop else ""
     shop_email = shop.get("email", "") if shop else ""
 
-    # Shop name
+    # ── Right column: shop info text ──
     title_style = ParagraphStyle("ShopTitle", parent=styles["Title"],
-                                  fontSize=20, textColor=colors.HexColor("#1a5c2a"),
-                                  spaceAfter=2)
-    story.append(Paragraph(shop_name, title_style))
+                                  fontSize=18, textColor=colors.HexColor("#1a5c2a"),
+                                  spaceAfter=2, alignment=TA_RIGHT)
+    info_style = ParagraphStyle("ShopInfo", parent=styles["Normal"],
+                                 fontSize=9, alignment=TA_RIGHT,
+                                 textColor=colors.HexColor("#475569"))
 
+    info_lines = [Paragraph(shop_name, title_style)]
     if shop_addr:
-        story.append(Paragraph(shop_addr, styles["Normal"]))
+        info_lines.append(Paragraph(shop_addr, info_style))
     contact_parts = [p for p in [shop_phone, shop_email] if p]
     if contact_parts:
-        story.append(Paragraph(" | ".join(contact_parts), styles["Normal"]))
+        info_lines.append(Paragraph(" | ".join(contact_parts), info_style))
 
-    story.append(Spacer(1, 8))
+    # ── Left column: logo (if available) ──
+    if os.path.exists(LOGO_PATH):
+        # Logo is 1080x500 (~2.16:1). Render at ~2.4" wide.
+        logo = Image(LOGO_PATH, width=2.4 * inch, height=2.4 / 2.16 * inch)
+        left_cell = logo
+    else:
+        left_cell = Paragraph("", styles["Normal"])
+
+    header_table = Table([[left_cell, info_lines]], colWidths=[2.6 * inch, 4.7 * inch])
+    header_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1, 10))
 
     # Document type header
     header_style = ParagraphStyle("DocHeader", parent=styles["Heading1"],
