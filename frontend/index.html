@@ -1628,13 +1628,20 @@ function EmployeesPage({ navigate }) {
 
     const save = async () => {
         const body = {...form};
-        if (body.hourly_rate !== '' && body.hourly_rate != null) body.hourly_rate = parseFloat(body.hourly_rate);
-        if (body.flag_rate !== '' && body.flag_rate != null) body.flag_rate = parseFloat(body.flag_rate);
+        // Convert blank numeric fields to null (Pydantic rejects empty strings for floats)
+        body.hourly_rate = (body.hourly_rate === '' || body.hourly_rate == null) ? null : parseFloat(body.hourly_rate);
+        body.flag_rate   = (body.flag_rate   === '' || body.flag_rate   == null) ? null : parseFloat(body.flag_rate);
+        // Convert blank optional strings to null
+        ['email','phone','hire_date','notes','employee_code'].forEach(k => { if (body[k] === '') body[k] = null; });
         body.is_active = body.is_active ? 1 : 0;
         if (!body.employee_code) body.employee_code = (body.first_name[0]||'')+(body.last_name||'').toUpperCase().slice(0,3)+(Math.floor(Math.random()*90)+10);
-        if (editId) await api(`/employees/${editId}`, { method: 'PUT', body });
-        else await api('/employees', { method: 'POST', body });
-        setShowForm(false); setEditId(null); setForm(emptyEmp); load();
+        try {
+            if (editId) await api(`/employees/${editId}`, { method: 'PUT', body });
+            else await api('/employees', { method: 'POST', body });
+            setShowForm(false); setEditId(null); setForm(emptyEmp); load();
+        } catch (err) {
+            alert('Failed to save employee: ' + (err.message || err));
+        }
     };
 
     return (
