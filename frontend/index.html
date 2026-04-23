@@ -483,7 +483,8 @@ function CustomerDetail({ id, navigate }) {
     const saveVehicle = async () => {
         const body = {...vehForm, customer_id: parseInt(id)};
         if (body.year) body.year = parseInt(body.year);
-        if (body.mileage) body.mileage = parseInt(body.mileage);
+        body.mileage = (body.mileage_unknown || !body.mileage) ? null : parseInt(body.mileage);
+        delete body.mileage_unknown;
         await api('/vehicles', { method: 'POST', body });
         setShowVehForm(false); setVehForm(emptyVeh); load();
     };
@@ -542,7 +543,21 @@ function CustomerDetail({ id, navigate }) {
                     <div className="form-group"><label>Color</label><input value={vehForm.color} onChange={e => setVehForm({...vehForm, color: e.target.value})} /></div>
                     <div className="form-group"><label>License Plate</label><input value={vehForm.license_plate} onChange={e => setVehForm({...vehForm, license_plate: e.target.value})} /></div>
                     <div className="form-group"><label>License State</label><input value={vehForm.license_state} onChange={e => setVehForm({...vehForm, license_state: e.target.value})} maxLength="2" placeholder="CA" /></div>
-                    <div className="form-group"><label>Mileage</label><input type="number" value={vehForm.mileage} onChange={e => setVehForm({...vehForm, mileage: e.target.value})} /></div>
+                    <div className="form-group">
+                        <label>Mileage</label>
+                        <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                            <input type="number" value={vehForm.mileage_unknown ? '' : vehForm.mileage}
+                                   disabled={!!vehForm.mileage_unknown}
+                                   placeholder={vehForm.mileage_unknown ? 'Unknown' : ''}
+                                   onChange={e => setVehForm({...vehForm, mileage: e.target.value})}
+                                   style={{flex:1}} />
+                            <label style={{display:'flex', alignItems:'center', gap:4, fontSize:13, whiteSpace:'nowrap', margin:0, cursor:'pointer'}}>
+                                <input type="checkbox" checked={!!vehForm.mileage_unknown}
+                                       onChange={e => setVehForm({...vehForm, mileage_unknown: e.target.checked, mileage: e.target.checked ? '' : vehForm.mileage})} />
+                                Unknown
+                            </label>
+                        </div>
+                    </div>
                 </div>
                 <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={vehForm.notes} onChange={e => setVehForm({...vehForm, notes: e.target.value})} /></div>
                 <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowVehForm(false)}>Cancel</button><button className="btn btn-primary" onClick={saveVehicle}><i className="fas fa-save"></i> Save Vehicle</button></div>
@@ -569,7 +584,8 @@ function VehiclesPage({ navigate }) {
     const save = async () => {
         const body = {...form};
         if (body.year) body.year = parseInt(body.year);
-        if (body.mileage) body.mileage = parseInt(body.mileage);
+        body.mileage = (body.mileage_unknown || !body.mileage) ? null : parseInt(body.mileage);
+        delete body.mileage_unknown;
         await api('/vehicles', { method: 'POST', body });
         setShowForm(false); setForm(emptyVeh); load();
     };
@@ -590,7 +606,7 @@ function VehiclesPage({ navigate }) {
                         <td className="text-sm">{v.vin||'—'}</td>
                         <td>{v.color||'—'}</td>
                         <td>{custName(v)}</td>
-                        <td>{v.mileage ? v.mileage.toLocaleString() : '—'}</td>
+                        <td>{v.mileage ? v.mileage.toLocaleString() : <span className="text-muted">Unknown</span>}</td>
                     </tr>
                 ))}
                 {!vehicles.length && <tr><td colSpan="5" className="text-muted" style={{textAlign:'center',padding:32}}>No vehicles found</td></tr>}
@@ -612,7 +628,21 @@ function VehiclesPage({ navigate }) {
                     <div className="form-group"><label>Color</label><input value={form.color} onChange={e => setForm({...form, color: e.target.value})} /></div>
                     <div className="form-group"><label>License Plate</label><input value={form.license_plate} onChange={e => setForm({...form, license_plate: e.target.value})} /></div>
                     <div className="form-group"><label>License State</label><input value={form.license_state} onChange={e => setForm({...form, license_state: e.target.value})} maxLength="2" placeholder="CA" /></div>
-                    <div className="form-group"><label>Mileage</label><input type="number" value={form.mileage} onChange={e => setForm({...form, mileage: e.target.value})} /></div>
+                    <div className="form-group">
+                        <label>Mileage</label>
+                        <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                            <input type="number" value={form.mileage_unknown ? '' : form.mileage}
+                                   disabled={!!form.mileage_unknown}
+                                   placeholder={form.mileage_unknown ? 'Unknown' : ''}
+                                   onChange={e => setForm({...form, mileage: e.target.value})}
+                                   style={{flex:1}} />
+                            <label style={{display:'flex', alignItems:'center', gap:4, fontSize:13, whiteSpace:'nowrap', margin:0, cursor:'pointer'}}>
+                                <input type="checkbox" checked={!!form.mileage_unknown}
+                                       onChange={e => setForm({...form, mileage_unknown: e.target.checked, mileage: e.target.checked ? '' : form.mileage})} />
+                                Unknown
+                            </label>
+                        </div>
+                    </div>
                 </div>
                 <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} /></div>
                 <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={!form.customer_id}><i className="fas fa-save"></i> Save</button></div>
@@ -631,7 +661,11 @@ function VehicleDetail({ id, navigate }) {
     const [customers, setCustomers] = useState([]);
     const [custSearch, setCustSearch] = useState('');
 
-    const load = () => api(`/vehicles/${id}`).then(data => { setV(data); setForm(data); });
+    const load = () => api(`/vehicles/${id}`).then(data => {
+        setV(data);
+        // Pre-check the Unknown box if the saved record has no mileage
+        setForm({...data, mileage_unknown: data.mileage == null});
+    });
     useEffect(() => { load(); }, [id]);
     useEffect(() => { if (editing) api('/customers').then(setCustomers).catch(() => setCustomers([])); }, [editing]);
 
@@ -643,7 +677,8 @@ function VehicleDetail({ id, navigate }) {
             make: form.make || null, model: form.model || null, submodel: form.submodel || null,
             color: form.color || null, license_plate: form.license_plate || null,
             license_state: form.license_state || null,
-            mileage: form.mileage ? parseInt(form.mileage) : null, notes: form.notes || null
+            mileage: (form.mileage_unknown || !form.mileage) ? null : parseInt(form.mileage),
+            notes: form.notes || null
         };
         await api(`/vehicles/${id}`, { method: 'PUT', body });
         setEditing(false); load();
@@ -678,7 +713,7 @@ function VehicleDetail({ id, navigate }) {
                     <div className="detail-row"><span className="detail-label">Color</span><span className="detail-value">{v.color||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">VIN</span><span className="detail-value">{v.vin||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Plate</span><span className="detail-value">{v.license_plate ? `${v.license_plate} (${v.license_state||'—'})` : '—'}</span></div>
-                    <div className="detail-row"><span className="detail-label">Mileage</span><span className="detail-value">{v.mileage ? v.mileage.toLocaleString() : '—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Mileage</span><span className="detail-value">{v.mileage ? v.mileage.toLocaleString() : <span className="text-muted">Unknown</span>}</span></div>
                 </div>
                 <div className="card">
                     <div className="section-title"><i className="fas fa-user"></i> Owner</div>
@@ -715,7 +750,21 @@ function VehicleDetail({ id, navigate }) {
                     <div className="form-group"><label>Color</label><input value={form.color||''} onChange={e => setForm({...form, color: e.target.value})} /></div>
                     <div className="form-group"><label>License Plate</label><input value={form.license_plate||''} onChange={e => setForm({...form, license_plate: e.target.value})} /></div>
                     <div className="form-group"><label>License State</label><input value={form.license_state||''} onChange={e => setForm({...form, license_state: e.target.value})} maxLength="2" /></div>
-                    <div className="form-group"><label>Mileage</label><input type="number" value={form.mileage||''} onChange={e => setForm({...form, mileage: e.target.value})} /></div>
+                    <div className="form-group">
+                        <label>Mileage</label>
+                        <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                            <input type="number" value={form.mileage_unknown ? '' : (form.mileage||'')}
+                                   disabled={!!form.mileage_unknown}
+                                   placeholder={form.mileage_unknown ? 'Unknown' : ''}
+                                   onChange={e => setForm({...form, mileage: e.target.value})}
+                                   style={{flex:1}} />
+                            <label style={{display:'flex', alignItems:'center', gap:4, fontSize:13, whiteSpace:'nowrap', margin:0, cursor:'pointer'}}>
+                                <input type="checkbox" checked={!!form.mileage_unknown}
+                                       onChange={e => setForm({...form, mileage_unknown: e.target.checked, mileage: e.target.checked ? '' : form.mileage})} />
+                                Unknown
+                            </label>
+                        </div>
+                    </div>
                 </div>
                 <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={form.notes||''} onChange={e => setForm({...form, notes: e.target.value})} /></div>
                 <div className="modal-actions"><button className="btn btn-outline" onClick={() => setEditing(false)}>Cancel</button><button className="btn btn-primary" onClick={save}><i className="fas fa-save"></i> Save</button></div>
@@ -1120,7 +1169,7 @@ function EstimateDetail({ id, navigate }) {
                     <div className="detail-row"><span className="detail-label">Vehicle</span><span className="detail-value">{vehDesc(est)}</span></div>
                     <div className="detail-row"><span className="detail-label">VIN</span><span className="detail-value">{est.vin||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Color</span><span className="detail-value">{est.vehicle_color||'—'}</span></div>
-                    <div className="detail-row"><span className="detail-label">Mileage</span><span className="detail-value">{est.mileage ? est.mileage.toLocaleString() : '—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Mileage</span><span className="detail-value">{est.mileage ? est.mileage.toLocaleString() : <span className="text-muted">Unknown</span>}</span></div>
                 </div>
                 <div className="card">
                     <div className="detail-row"><span className="detail-label">Estimator</span><span className="detail-value">{[est.estimator_first, est.estimator_last].filter(Boolean).join(' ')||'—'}</span></div>

@@ -313,7 +313,7 @@ def generate_invoice_pdf(ro, lines, payments=None, shop=None):
         ("Customer", cust_name),
         ("Vehicle", veh),
         ("VIN", ro.get("vin", "—")),
-        ("Mileage", str(ro.get("mileage", "—"))),
+        ("Mileage", f"{ro['mileage']:,}" if ro.get("mileage") else "Unknown"),
     ]
     right_data = [
         ("Insurance", ro.get("insurance_name", "—")),
