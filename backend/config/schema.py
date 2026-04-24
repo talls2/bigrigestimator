@@ -360,7 +360,7 @@ TABLES = [
     """CREATE TABLE IF NOT EXISTS shop_rates (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         rate_name TEXT NOT NULL,
-        rate_type TEXT CHECK(rate_type IN ('body_labor','paint_labor','mechanical_labor','frame_labor','glass_labor','paint_materials','storage','other')),
+        rate_type TEXT,
         rate_amount REAL NOT NULL DEFAULT 0,
         effective_date TEXT DEFAULT (date('now')),
         is_active INTEGER DEFAULT 1,

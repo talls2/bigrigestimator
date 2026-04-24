@@ -18,6 +18,48 @@ def _has_legacy_operation_check(conn, table: str) -> bool:
     return "operation IN ('repair','replace','refinish','blend','overhaul','sublet','other')" in sql
 
 
+def _has_legacy_rate_type_check(conn) -> bool:
+    """Detect the old restrictive CHECK constraint on shop_rates.rate_type."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='shop_rates'"
+    ).fetchone()
+    if not row or not row[0]:
+        return False
+    return "rate_type IN ('body_labor'" in row[0]
+
+
+def _drop_shop_rates_check(conn) -> None:
+    """Rebuild shop_rates without the restrictive rate_type CHECK."""
+    cur = conn.cursor()
+    cols_info = cur.execute("PRAGMA table_info(shop_rates)").fetchall()
+    col_names = [c[1] for c in cols_info]
+    col_list = ", ".join(col_names)
+
+    cur.execute("PRAGMA foreign_keys = OFF")
+    try:
+        cur.execute("""
+            CREATE TABLE shop_rates__new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rate_name TEXT NOT NULL,
+                rate_type TEXT,
+                rate_amount REAL NOT NULL DEFAULT 0,
+                effective_date TEXT DEFAULT (date('now')),
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        new_cols_info = cur.execute("PRAGMA table_info(shop_rates__new)").fetchall()
+        new_col_names = {c[1] for c in new_cols_info}
+        copy_cols = [c for c in col_names if c in new_col_names]
+        copy_list = ", ".join(copy_cols)
+        cur.execute(f"INSERT INTO shop_rates__new ({copy_list}) SELECT {copy_list} FROM shop_rates")
+        cur.execute("DROP TABLE shop_rates")
+        cur.execute("ALTER TABLE shop_rates__new RENAME TO shop_rates")
+        conn.commit()
+    finally:
+        cur.execute("PRAGMA foreign_keys = ON")
+
+
 def _drop_operation_check(conn, table: str, fk_parent_col: str) -> None:
     """
     Recreate `table` without the restrictive CHECK on `operation`.
@@ -124,7 +166,13 @@ def run_migrations(conn) -> None:
             conn.execute(f"UPDATE {table} SET taxable = CASE WHEN line_type = 'part' THEN 1 ELSE 0 END")
             conn.commit()
 
-    # Migration 003: add configurable sales_tax_rate to shop_rates if missing.
+    # Migration 003: drop restrictive shop_rates.rate_type CHECK so we can add
+    # arbitrary rate types (e.g. sales_tax_rate) without hitting the old enum.
+    if _has_legacy_rate_type_check(conn):
+        print("[migration] Removing restrictive rate_type CHECK on shop_rates")
+        _drop_shop_rates_check(conn)
+
+    # Migration 004: add configurable sales_tax_rate to shop_rates if missing.
     row = conn.execute(
         "SELECT id FROM shop_rates WHERE rate_type = 'sales_tax_rate'"
     ).fetchone()
