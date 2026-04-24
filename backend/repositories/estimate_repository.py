@@ -113,14 +113,39 @@ class EstimateRepository(BaseRepository):
                 "SELECT * FROM estimate_lines WHERE estimate_id = ?", (eid,)
             ).fetchall()
 
-            labor = sum(float(r['labor_hours'] or 0) * float(r['labor_rate'] or 0) for r in lines)
-            parts = sum(float(r['part_price'] or 0) * float(r['quantity'] or 1)
-                        for r in lines if r['line_type'] == 'part')
-            paint = sum(float(r['paint_hours'] or 0) * float(r['paint_rate'] or 0) for r in lines)
-            other = sum(float(r['line_total'] or 0)
-                        for r in lines if r['line_type'] in ('sublet', 'other'))
+            est = db.execute(
+                "SELECT tax_exempt FROM estimates WHERE id = ?", (eid,)
+            ).fetchone()
+            tax_exempt = bool(est and est["tax_exempt"])
 
-            tax = parts * 0.065
+            # Sales tax rate is configurable in shop_rates (percent value, e.g. 6.25)
+            rate_row = db.execute(
+                "SELECT rate_amount FROM shop_rates WHERE rate_type = 'sales_tax_rate' LIMIT 1"
+            ).fetchone()
+            tax_rate = (float(rate_row["rate_amount"]) / 100.0) if rate_row else 0.0625
+
+            def line_amount(r):
+                lt = r["line_type"]
+                if lt == "labor":
+                    return float(r["labor_hours"] or 0) * float(r["labor_rate"] or 0)
+                if lt == "paint":
+                    return float(r["paint_hours"] or 0) * float(r["paint_rate"] or 0)
+                if lt == "part":
+                    return float(r["part_price"] or 0) * float(r["quantity"] or 1)
+                # sublet, other
+                return float(r["line_total"] or 0)
+
+            labor = sum(line_amount(r) for r in lines if r["line_type"] == "labor")
+            parts = sum(line_amount(r) for r in lines if r["line_type"] == "part")
+            paint = sum(line_amount(r) for r in lines if r["line_type"] == "paint")
+            other = sum(line_amount(r) for r in lines if r["line_type"] in ("sublet", "other"))
+
+            if tax_exempt:
+                tax = 0.0
+            else:
+                taxable_total = sum(line_amount(r) for r in lines if r["taxable"])
+                tax = taxable_total * tax_rate
+
             total = labor + parts + paint + other + tax
 
             db.execute("""

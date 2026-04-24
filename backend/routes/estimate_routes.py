@@ -30,6 +30,7 @@ class EstimateIn(BaseModel):
     loss_date: Optional[str] = None
     point_of_impact: Optional[str] = None
     damage_description: Optional[str] = None
+    tax_exempt: Optional[int] = None
     notes: Optional[str] = None
 
 
@@ -48,6 +49,7 @@ class EstimateLineIn(BaseModel):
     part_cost: float = 0
     is_supplement: int = 0
     supplement_number: int = 0
+    taxable: Optional[int] = None
     notes: Optional[str] = None
 
 

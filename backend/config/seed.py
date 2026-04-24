@@ -36,6 +36,7 @@ def seed_production_data(conn):
         ('Frame Labor',      'frame_labor',      62.00),
         ('Glass Labor',      'glass_labor',      55.00),
         ('Paint Materials',  'paint_materials',  38.00),
+        ('Sales Tax Rate %', 'sales_tax_rate',    6.25),  # MA state sales tax
     ]:
         cur.execute("INSERT INTO shop_rates (rate_name, rate_type, rate_amount) VALUES (?,?,?)",
                     (name, rtype, amt))

@@ -28,6 +28,7 @@ class RepairOrderIn(BaseModel):
     status: str = "open"
     priority: str = "normal"
     loss_date: Optional[str] = None
+    tax_exempt: Optional[int] = None
     notes: Optional[str] = None
 
 
@@ -47,6 +48,7 @@ class RepairOrderLineIn(BaseModel):
     is_supplement: int = 0
     vendor_id: Optional[int] = None
     assigned_tech_id: Optional[int] = None
+    taxable: Optional[int] = None
     notes: Optional[str] = None
 
 

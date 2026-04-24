@@ -1074,14 +1074,14 @@ function EstimateDetail({ id, navigate }) {
     const [showAddLine, setShowAddLine] = useState(false);
     const [rates, setRates] = useState([]);
     const [lineForm, setLineForm] = useState({ line_type: 'labor', operation: '', description: '', part_number: '', part_type: 'OEM',
-        quantity: 1, labor_hours: 0, labor_rate: 0, paint_hours: 0, paint_rate: 0, part_price: 0, part_cost: 0, notes: '' });
+        quantity: 1, labor_hours: 0, labor_rate: 0, paint_hours: 0, paint_rate: 0, part_price: 0, part_cost: 0, taxable: false, notes: '' });
     const [lineSaving, setLineSaving] = useState(false);
 
     const load = () => api(`/estimates/${id}`).then(setEst);
     useEffect(() => { load(); }, [id]);
     useEffect(() => { api('/shop/rates').then(setRates).catch(() => {}); }, []);
 
-    // Auto-fill rate when type changes
+    // Auto-fill rate (and default taxability) when type changes
     const setLineField = (field, val) => {
         setLineForm(prev => {
             const next = {...prev, [field]: val};
@@ -1091,9 +1091,18 @@ function EstimateDetail({ id, navigate }) {
                 else if (val === 'paint' || val === 'refinish') { next.paint_rate = findRate('paint') || findRate('refinish'); next.labor_rate = 0; next.labor_hours = 0; next.part_price = 0; next.part_cost = 0; next.part_number = ''; }
                 else if (val === 'part') { next.labor_hours = 0; next.labor_rate = 0; next.paint_hours = 0; next.paint_rate = 0; }
                 else { next.labor_hours = 0; next.labor_rate = 0; next.paint_hours = 0; next.paint_rate = 0; next.part_number = ''; }
+                // Parts default to taxable; everything else defaults to non-taxable.
+                next.taxable = val === 'part';
             }
             return next;
         });
+    };
+
+    const toggleTaxExempt = async () => {
+        try {
+            await api(`/estimates/${id}`, { method: 'PUT', body: { customer_id: est.customer_id, tax_exempt: est.tax_exempt ? 0 : 1 } });
+            load();
+        } catch (err) { alert('Failed to update tax exemption: ' + (err.message || err)); }
     };
 
     const addLine = async () => {
@@ -1113,11 +1122,13 @@ function EstimateDetail({ id, navigate }) {
                 paint_rate: parseFloat(lineForm.paint_rate) || 0,
                 part_price: parseFloat(lineForm.part_price) || 0,
                 part_cost: parseFloat(lineForm.part_cost) || 0,
+                taxable: lineForm.taxable ? 1 : 0,
                 notes: lineForm.notes || null,
             };
             await api(`/estimates/${id}/lines`, { method: 'POST', body });
             setLineForm({ line_type: lineForm.line_type, operation: '', description: '', part_number: '', part_type: 'OEM',
-                quantity: 1, labor_hours: 0, labor_rate: body.labor_rate, paint_hours: 0, paint_rate: body.paint_rate, part_price: 0, part_cost: 0, notes: '' });
+                quantity: 1, labor_hours: 0, labor_rate: body.labor_rate, paint_hours: 0, paint_rate: body.paint_rate, part_price: 0, part_cost: 0,
+                taxable: lineForm.line_type === 'part', notes: '' });
             load();
         } catch (err) { alert(err.message); }
         setLineSaving(false);
@@ -1337,9 +1348,16 @@ function EstimateDetail({ id, navigate }) {
                             </>}
                         </div>
 
-                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)'}}>
-                            <div style={{fontSize: 15, fontWeight: 600}}>
-                                Line Total: <span style={{color:'var(--primary)', fontSize: 17}}>{fmt(lineTotal)}</span>
+                        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)', gap: 16, flexWrap: 'wrap'}}>
+                            <div style={{display:'flex', alignItems:'center', gap: 16, flexWrap:'wrap'}}>
+                                <div style={{fontSize: 15, fontWeight: 600}}>
+                                    Line Total: <span style={{color:'var(--primary)', fontSize: 17}}>{fmt(lineTotal)}</span>
+                                </div>
+                                <label style={{display:'flex', alignItems:'center', gap:6, fontSize:13, cursor: est.tax_exempt ? 'not-allowed' : 'pointer', opacity: est.tax_exempt ? 0.5 : 1}}>
+                                    <input type="checkbox" checked={!!lineForm.taxable && !est.tax_exempt} disabled={!!est.tax_exempt}
+                                           onChange={e => setLineField('taxable', e.target.checked)} />
+                                    Tax applies to this line
+                                </label>
                             </div>
                             <button className="btn btn-primary" onClick={addLine} disabled={lineSaving || !lineForm.description}>
                                 {lineSaving ? <><i className="fas fa-spinner fa-spin"></i> Adding...</> : <><i className="fas fa-plus"></i> Add Line</>}
@@ -1349,10 +1367,10 @@ function EstimateDetail({ id, navigate }) {
                 )}
 
                 <div className="table-wrapper">
-                    <table><thead><tr><th>#</th><th>Type</th><th>Operation</th><th>Description</th><th>Part #</th><th>Hours</th><th>Rate</th><th>Parts $</th><th>Total</th>{est.status !== 'converted' && <th></th>}</tr></thead>
+                    <table><thead><tr><th>#</th><th>Type</th><th>Operation</th><th>Description</th><th>Part #</th><th>Hours</th><th>Rate</th><th>Parts $</th><th title="Taxable">Tax</th><th>Total</th>{est.status !== 'converted' && <th></th>}</tr></thead>
                     <tbody>
                     {(est.lines||[]).length === 0 && (
-                        <tr><td colSpan={est.status !== 'converted' ? 10 : 9} style={{textAlign:'center', color:'var(--text-muted)', padding: 24}}>
+                        <tr><td colSpan={est.status !== 'converted' ? 11 : 10} style={{textAlign:'center', color:'var(--text-muted)', padding: 24}}>
                             No line items yet — click "Add Line" to start building the estimate
                         </td></tr>
                     )}
@@ -1366,6 +1384,7 @@ function EstimateDetail({ id, navigate }) {
                             <td>{l.labor_hours || l.paint_hours || '—'}</td>
                             <td>{l.labor_rate || l.paint_rate || '—'}</td>
                             <td className="money">{l.part_price ? fmt(l.part_price * (l.quantity||1)) : '—'}</td>
+                            <td style={{textAlign:'center'}}>{l.taxable ? <i className="fas fa-check text-green" title="Taxable"></i> : <span className="text-muted" title="Not taxable">—</span>}</td>
                             <td className="money" style={{fontWeight:600}}>{fmt(l.line_total)}</td>
                             {est.status !== 'converted' && (
                                 <td><button className="btn btn-outline btn-sm" style={{color:'var(--red)', borderColor:'var(--red)', padding:'4px 8px'}}
@@ -1376,11 +1395,24 @@ function EstimateDetail({ id, navigate }) {
                     </tbody></table>
                 </div>
                 <div style={{display:'flex', justifyContent:'flex-end', marginTop:16}}>
-                    <div style={{width:280}}>
+                    <div style={{width:300}}>
                         <div className="detail-row"><span className="detail-label">Labor</span><span className="detail-value money">{fmt(est.subtotal_labor)}</span></div>
                         <div className="detail-row"><span className="detail-label">Parts</span><span className="detail-value money">{fmt(est.subtotal_parts)}</span></div>
                         <div className="detail-row"><span className="detail-label">Paint</span><span className="detail-value money">{fmt(est.subtotal_paint)}</span></div>
-                        <div className="detail-row"><span className="detail-label">Tax</span><span className="detail-value money">{fmt(est.tax_amount)}</span></div>
+                        <div className="detail-row">
+                            <span className="detail-label" style={{display:'flex', alignItems:'center', gap:6}}>
+                                Tax
+                                {est.status !== 'converted' && (
+                                    <label style={{fontSize:11, fontWeight:500, cursor:'pointer', color:'var(--text-muted)', display:'flex', alignItems:'center', gap:3}}>
+                                        <input type="checkbox" checked={!!est.tax_exempt} onChange={toggleTaxExempt} style={{margin:0}} />
+                                        Exempt
+                                    </label>
+                                )}
+                            </span>
+                            <span className="detail-value money">
+                                {est.tax_exempt ? <span className="text-muted" style={{fontSize:13, fontWeight:500}}>EXEMPT</span> : fmt(est.tax_amount)}
+                            </span>
+                        </div>
                         <div className="detail-row" style={{borderTop:'2px solid var(--primary)', paddingTop:8}}>
                             <span className="detail-label" style={{fontWeight:700,fontSize:15}}>Total</span>
                             <span className="detail-value money" style={{fontSize:18,color:'var(--primary)'}}>{fmt(est.total_amount)}</span>
@@ -1460,6 +1492,13 @@ function RODetail({ id, navigate }) {
         load();
     };
 
+    const toggleTaxExempt = async () => {
+        try {
+            await api(`/repair-orders/${id}`, { method: 'PUT', body: { customer_id: ro.customer_id, tax_exempt: ro.tax_exempt ? 0 : 1 } });
+            load();
+        } catch (err) { alert('Failed to update tax exemption: ' + (err.message || err)); }
+    };
+
     return (
         <div>
             <div className="page-header">
@@ -1518,7 +1557,7 @@ function RODetail({ id, navigate }) {
             {tab === 'lines' && (
                 <div className="card">
                     <div className="table-wrapper">
-                        <table><thead><tr><th>#</th><th>Type</th><th>Op</th><th>Description</th><th>Part #</th><th>Qty</th><th>Hours</th><th>Rate</th><th>Parts $</th><th>Status</th><th>Total</th></tr></thead>
+                        <table><thead><tr><th>#</th><th>Type</th><th>Op</th><th>Description</th><th>Part #</th><th>Qty</th><th>Hours</th><th>Rate</th><th>Parts $</th><th title="Taxable">Tax</th><th>Status</th><th>Total</th></tr></thead>
                         <tbody>
                         {(ro.lines||[]).map(l => (
                             <tr key={l.id}>
@@ -1526,6 +1565,7 @@ function RODetail({ id, navigate }) {
                                 <td>{l.description}</td><td className="text-sm">{l.part_number||'—'}</td>
                                 <td>{l.quantity}</td><td>{l.labor_hours||l.paint_hours||'—'}</td><td>{l.labor_rate||l.paint_rate||'—'}</td>
                                 <td className="money">{l.part_price ? fmt(l.part_price):'—'}</td>
+                                <td style={{textAlign:'center'}}>{l.taxable ? <i className="fas fa-check text-green" title="Taxable"></i> : <span className="text-muted" title="Not taxable">—</span>}</td>
                                 <td><Badge status={l.status}/></td>
                                 <td className="money" style={{fontWeight:600}}>{fmt(l.line_total)}</td>
                             </tr>
@@ -1537,7 +1577,20 @@ function RODetail({ id, navigate }) {
                             <div className="detail-row"><span className="detail-label">Labor</span><span className="detail-value money">{fmt(ro.subtotal_labor)}</span></div>
                             <div className="detail-row"><span className="detail-label">Parts</span><span className="detail-value money">{fmt(ro.subtotal_parts)}</span></div>
                             <div className="detail-row"><span className="detail-label">Paint</span><span className="detail-value money">{fmt(ro.subtotal_paint)}</span></div>
-                            <div className="detail-row"><span className="detail-label">Tax</span><span className="detail-value money">{fmt(ro.tax_amount)}</span></div>
+                            <div className="detail-row">
+                                <span className="detail-label" style={{display:'flex', alignItems:'center', gap:6}}>
+                                    Tax
+                                    {ro.status !== 'closed' && ro.status !== 'delivered' && (
+                                        <label style={{fontSize:11, fontWeight:500, cursor:'pointer', color:'var(--text-muted)', display:'flex', alignItems:'center', gap:3}}>
+                                            <input type="checkbox" checked={!!ro.tax_exempt} onChange={toggleTaxExempt} style={{margin:0}} />
+                                            Exempt
+                                        </label>
+                                    )}
+                                </span>
+                                <span className="detail-value money">
+                                    {ro.tax_exempt ? <span className="text-muted" style={{fontSize:13, fontWeight:500}}>EXEMPT</span> : fmt(ro.tax_amount)}
+                                </span>
+                            </div>
                             <div className="detail-row" style={{borderTop:'2px solid var(--border)'}}><span className="detail-label" style={{fontWeight:700}}>Total</span><span className="detail-value money" style={{fontSize:16}}>{fmt(ro.total_amount)}</span></div>
                             <div className="detail-row"><span className="detail-label">Paid</span><span className="detail-value money text-green">{fmt(ro.amount_paid)}</span></div>
                             <div className="detail-row" style={{borderTop:'2px solid var(--primary)'}}><span className="detail-label" style={{fontWeight:700,fontSize:15}}>Balance Due</span><span className="detail-value money" style={{fontSize:18,color: ro.balance_due > 0 ? 'var(--red)':'var(--green)'}}>{fmt(ro.balance_due)}</span></div>

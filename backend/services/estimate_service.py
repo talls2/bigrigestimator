@@ -82,6 +82,10 @@ class EstimateService:
 
         self.estimate_repo.update(estimate_id, data)
 
+        # If tax_exempt was toggled, totals need to be recomputed.
+        if "tax_exempt" in data:
+            self.estimate_repo.recalc_totals(estimate_id)
+
     def add_line(self, estimate_id: int, data: dict) -> int:
         """
         Add a line item to an estimate and recalculate totals.
@@ -100,6 +104,10 @@ class EstimateService:
         existing = self.estimate_repo.get_by_id(estimate_id)
         if not existing:
             raise ValueError(f"Estimate {estimate_id} not found")
+
+        # Default `taxable`: parts are taxable, everything else is not — caller can override.
+        if data.get("taxable") is None:
+            data["taxable"] = 1 if data.get("line_type") == "part" else 0
 
         # Add the line
         line_id = self.estimate_repo.add_line(estimate_id, data)
@@ -172,6 +180,7 @@ class EstimateService:
             "subtotal_paint": estimate.get("subtotal_paint", 0),
             "subtotal_other": estimate.get("subtotal_other", 0),
             "tax_amount": estimate.get("tax_amount", 0),
+            "tax_exempt": estimate.get("tax_exempt", 0),
             "total_amount": estimate.get("total_amount", 0),
             "balance_due": estimate.get("total_amount", 0),
         }
@@ -179,7 +188,7 @@ class EstimateService:
         # Create the RO
         ro_id = self.ro_repo.insert(ro_data)
 
-        # Copy all estimate lines to RO lines
+        # Copy all estimate lines to RO lines (including taxable flag)
         if estimate.get("lines"):
             for line in estimate["lines"]:
                 ro_line_data = {
@@ -195,8 +204,12 @@ class EstimateService:
                     "paint_rate": line.get("paint_rate", 0),
                     "part_price": line.get("part_price", 0),
                     "part_cost": line.get("part_cost", 0),
+                    "taxable": line.get("taxable", 1 if line.get("line_type") == "part" else 0),
                 }
                 self.ro_repo.add_line(ro_id, ro_line_data)
+
+        # Recompute totals so any tax-rate change since the estimate is reflected.
+        self.ro_repo.recalc_totals(ro_id)
 
         # Mark estimate as converted
         self.estimate_repo.update(estimate_id, {"status": "converted"})

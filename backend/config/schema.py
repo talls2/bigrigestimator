@@ -159,6 +159,7 @@ TABLES = [
         subtotal_paint REAL DEFAULT 0,
         subtotal_other REAL DEFAULT 0,
         tax_amount REAL DEFAULT 0,
+        tax_exempt INTEGER DEFAULT 0,
         total_amount REAL DEFAULT 0,
         notes TEXT,
         created_at TEXT DEFAULT (datetime('now')),
@@ -185,6 +186,7 @@ TABLES = [
         line_total REAL DEFAULT 0,
         is_supplement INTEGER DEFAULT 0,
         supplement_number INTEGER DEFAULT 0,
+        taxable INTEGER DEFAULT 1,
         notes TEXT,
         created_at TEXT DEFAULT (datetime('now'))
     )""",
@@ -227,6 +229,7 @@ TABLES = [
         subtotal_sublet REAL DEFAULT 0,
         subtotal_other REAL DEFAULT 0,
         tax_amount REAL DEFAULT 0,
+        tax_exempt INTEGER DEFAULT 0,
         total_amount REAL DEFAULT 0,
         amount_paid REAL DEFAULT 0,
         balance_due REAL DEFAULT 0,
@@ -259,6 +262,7 @@ TABLES = [
             CHECK(status IN ('pending','ordered','received','installed','complete')),
         assigned_tech_id INTEGER REFERENCES employees(id),
         vendor_id INTEGER REFERENCES vendors(id),
+        taxable INTEGER DEFAULT 1,
         notes TEXT,
         created_at TEXT DEFAULT (datetime('now'))
     )""",

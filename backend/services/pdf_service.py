@@ -184,7 +184,10 @@ def _build_totals(story, styles, data, is_invoice=False):
         totals_data.append(["Sublet:", _fmt(data["subtotal_sublet"])])
     if data.get("subtotal_other"):
         totals_data.append(["Other:", _fmt(data["subtotal_other"])])
-    totals_data.append(["Tax (parts):", _fmt(data.get("tax_amount", 0))])
+    if data.get("tax_exempt"):
+        totals_data.append(["Tax:", "EXEMPT"])
+    elif data.get("tax_amount"):
+        totals_data.append(["Tax:", _fmt(data["tax_amount"])])
     totals_data.append(["TOTAL:", _fmt(data.get("total_amount", 0))])
 
     if is_invoice:

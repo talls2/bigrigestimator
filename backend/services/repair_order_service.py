@@ -86,6 +86,10 @@ class RepairOrderService:
 
         self.repo.update(ro_id, data)
 
+        # If tax_exempt was toggled, totals need to be recomputed.
+        if "tax_exempt" in data:
+            self.repo.recalc_totals(ro_id)
+
     def add_line(self, ro_id: int, data: dict) -> int:
         """
         Add a line item to a repair order and recalculate totals.
@@ -104,6 +108,10 @@ class RepairOrderService:
         existing = self.repo.get_by_id(ro_id)
         if not existing:
             raise ValueError(f"Repair order {ro_id} not found")
+
+        # Default `taxable`: parts are taxable, everything else is not — caller can override.
+        if data.get("taxable") is None:
+            data["taxable"] = 1 if data.get("line_type") == "part" else 0
 
         # Add the line
         line_id = self.repo.add_line(ro_id, data)
