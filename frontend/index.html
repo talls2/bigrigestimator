@@ -1480,10 +1480,22 @@ function RODetail({ id, navigate }) {
     const [tab, setTab] = useState('lines');
     const [showPayment, setShowPayment] = useState(false);
     const [payForm, setPayForm] = useState({amount:'',payment_method:'insurance',reference_number:'',payer_name:''});
+    const [employees, setEmployees] = useState([]);
 
     const load = () => api(`/repair-orders/${id}`).then(setRo);
     useEffect(() => { load(); }, [id]);
+    useEffect(() => { api('/employees').then(setEmployees).catch(() => setEmployees([])); }, []);
     if (!ro) return <div className="empty-state"><i className="fas fa-spinner fa-spin"></i></div>;
+
+    const assignTeam = async (field, value) => {
+        try {
+            await api(`/repair-orders/${id}`, { method: 'PUT', body: {
+                customer_id: ro.customer_id,
+                [field]: value ? parseInt(value) : null,
+            }});
+            load();
+        } catch (err) { alert('Failed to update assignment: ' + (err.message || err)); }
+    };
 
     const addPayment = async () => {
         await api(`/repair-orders/${id}/payments`, { method: 'POST', body: { ...payForm, amount: parseFloat(payForm.amount) } });
@@ -1555,13 +1567,28 @@ function RODetail({ id, navigate }) {
                     <div className="detail-row"><span className="detail-label">License</span><span className="detail-value">{ro.license_plate||'—'}</span></div>
                 </div>
                 <div className="card">
-                    <div className="section-title"><i className="fas fa-shield-halved"></i> Insurance & Assignment</div>
+                    <div className="section-title"><i className="fas fa-shield-halved"></i> Insurance & Team</div>
                     <div className="detail-row"><span className="detail-label">Insurance</span><span className="detail-value">{ro.insurance_name||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Claim #</span><span className="detail-value">{ro.claim_number||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Deductible</span><span className="detail-value money">{fmt(ro.deductible)}</span></div>
-                    <div className="detail-row"><span className="detail-label">Estimator</span><span className="detail-value">{[ro.estimator_first, ro.estimator_last].filter(Boolean).join(' ')||'—'}</span></div>
-                    <div className="detail-row"><span className="detail-label">Technician</span><span className="detail-value">{[ro.tech_first, ro.tech_last].filter(Boolean).join(' ')||'—'}</span></div>
-                    <div className="detail-row"><span className="detail-label">Painter</span><span className="detail-value">{[ro.painter_first, ro.painter_last].filter(Boolean).join(' ')||'—'}</span></div>
+                    {[
+                        ['estimator_id', 'Estimator'],
+                        ['technician_id', 'Technician'],
+                        ['painter_id', 'Painter'],
+                    ].map(([field, label]) => (
+                        <div className="detail-row" key={field}>
+                            <span className="detail-label">{label}</span>
+                            <span className="detail-value" style={{minWidth:0, flex:1, marginLeft:12}}>
+                                <select value={ro[field] || ''} onChange={e => assignTeam(field, e.target.value)}
+                                        style={{width:'100%', padding:'4px 8px', fontSize:13}}>
+                                    <option value="">— Unassigned —</option>
+                                    {employees.filter(e => e.is_active).map(e => (
+                                        <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>
+                                    ))}
+                                </select>
+                            </span>
+                        </div>
+                    ))}
                 </div>
             </div>
 
@@ -1890,6 +1917,9 @@ function UsersPage({ user: currentUser }) {
         setError('');
         try {
             if (editId) {
+                if (form.role === 'worker' && !form.employee_id) {
+                    return setError('Worker accounts must be linked to an employee — pick one under Linked Employee or change role to Office/Admin.');
+                }
                 const body = {
                     display_name: form.display_name || null,
                     role: form.role,
@@ -1900,6 +1930,9 @@ function UsersPage({ user: currentUser }) {
             } else {
                 if (!form.username) return setError('Username is required');
                 if (!form.pin || form.pin.length < 4) return setError('PIN must be at least 4 digits');
+                if (form.role === 'worker' && !form.employee_id) {
+                    return setError('Worker accounts must be linked to an employee — pick one under Linked Employee or change role to Office/Admin.');
+                }
                 const body = {
                     username: form.username.trim().toLowerCase(),
                     pin: form.pin,
@@ -2026,13 +2059,18 @@ function UsersPage({ user: currentUser }) {
                         </select>
                     </div>
                     <div className="form-group">
-                        <label>Linked Employee</label>
+                        <label>Linked Employee {form.role === 'worker' && <span style={{color:'var(--danger)'}}>*</span>}</label>
                         <select value={form.employee_id || ''} onChange={e => setForm({...form, employee_id: e.target.value})}>
                             <option value="">— None —</option>
                             {employees.filter(e => e.is_active).map(e => (
                                 <option key={e.id} value={e.id}>{e.first_name} {e.last_name} ({e.employee_code})</option>
                             ))}
                         </select>
+                        {form.role === 'worker' && (
+                            <div className="text-muted" style={{fontSize:11, marginTop:4}}>
+                                Required for workers — time cards are tracked against the employee record.
+                            </div>
+                        )}
                     </div>
                     {editId && (
                         <div className="form-group">
@@ -2328,9 +2366,16 @@ function ReportsPage() {
 function SettingsPage() {
     const [info, setInfo] = useState(null);
     const [rates, setRates] = useState([]);
+    const [showAddRate, setShowAddRate] = useState(false);
+    const [newRate, setNewRate] = useState({rate_name:'', rate_type:'', rate_amount:''});
+    const [editRateId, setEditRateId] = useState(null);
+    const [editRate, setEditRate] = useState({rate_name:'', rate_type:'', rate_amount:''});
+
+    const loadRates = () => api('/shop/rates').then(setRates);
+
     useEffect(() => {
         api('/shop/info').then(setInfo);
-        api('/shop/rates').then(setRates);
+        loadRates();
     }, []);
 
     const save = async () => {
@@ -2338,10 +2383,53 @@ function SettingsPage() {
         alert('Shop info saved!');
     };
 
+    const startEditRate = (r) => {
+        setEditRateId(r.id);
+        setEditRate({rate_name: r.rate_name, rate_type: r.rate_type||'', rate_amount: r.rate_amount});
+    };
+
+    const saveEditRate = async () => {
+        try {
+            await api(`/shop/rates/${editRateId}`, { method: 'PUT', body: {
+                rate_name: editRate.rate_name,
+                rate_type: editRate.rate_type || null,
+                rate_amount: parseFloat(editRate.rate_amount),
+            }});
+            setEditRateId(null); loadRates();
+        } catch (err) { alert('Failed to save: ' + (err.message || err)); }
+    };
+
+    const deleteRate = async (r) => {
+        if (!confirm(`Delete rate "${r.rate_name}"?`)) return;
+        try {
+            await api(`/shop/rates/${r.id}`, { method: 'DELETE' });
+            loadRates();
+        } catch (err) { alert('Failed to delete: ' + (err.message || err)); }
+    };
+
+    const addRate = async () => {
+        if (!newRate.rate_name) return alert('Rate name is required');
+        if (newRate.rate_amount === '') return alert('Rate amount is required');
+        try {
+            await api('/shop/rates', { method: 'POST', body: {
+                rate_name: newRate.rate_name,
+                rate_type: newRate.rate_type || null,
+                rate_amount: parseFloat(newRate.rate_amount),
+            }});
+            setShowAddRate(false);
+            setNewRate({rate_name:'', rate_type:'', rate_amount:''});
+            loadRates();
+        } catch (err) { alert('Failed to add: ' + (err.message || err)); }
+    };
+
     if (!info) return <div className="empty-state"><i className="fas fa-spinner fa-spin"></i></div>;
+
+    // Tax rate is shown specially since the unit is %, not $/hr
+    const isTaxRate = (r) => r.rate_type === 'sales_tax_rate';
+
     return (
         <div>
-            <div className="page-header"><h2>Shop Settings</h2><button className="btn btn-primary" onClick={save}><i className="fas fa-save"></i> Save</button></div>
+            <div className="page-header"><h2>Shop Settings</h2><button className="btn btn-primary" onClick={save}><i className="fas fa-save"></i> Save Shop Info</button></div>
             <div className="card">
                 <div className="section-title"><i className="fas fa-store"></i> Shop Information</div>
                 <div className="form-grid">
@@ -2351,11 +2439,58 @@ function SettingsPage() {
                 </div>
             </div>
             <div className="card">
-                <div className="section-title"><i className="fas fa-dollar-sign"></i> Shop Rates</div>
-                <table><thead><tr><th>Rate Name</th><th>Type</th><th>Amount</th></tr></thead>
-                <tbody>{rates.map(r => (
-                    <tr key={r.id}><td>{r.rate_name}</td><td>{(r.rate_type||'').replace(/_/g,' ')}</td><td className="money" style={{fontWeight:600}}>{fmt(r.rate_amount)}/hr</td></tr>
-                ))}</tbody></table>
+                <div className="card-header" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <div className="section-title" style={{margin:0}}><i className="fas fa-dollar-sign"></i> Shop Rates</div>
+                    <button className="btn btn-primary btn-sm" onClick={() => setShowAddRate(true)}><i className="fas fa-plus"></i> Add Rate</button>
+                </div>
+                <div className="text-sm text-muted" style={{marginBottom:12}}>
+                    Labor rates default to dollars per hour. The "sales_tax_rate" row is the percent (e.g. 6.25 = 6.25%).
+                    Delete any rate types your shop doesn't use.
+                </div>
+                <div className="table-wrapper">
+                    <table>
+                        <thead><tr><th>Rate Name</th><th>Type slug</th><th>Amount</th><th style={{width:170}}></th></tr></thead>
+                        <tbody>{rates.map(r => (
+                            editRateId === r.id ? (
+                                <tr key={r.id} style={{background:'rgba(77,184,106,0.08)'}}>
+                                    <td><input value={editRate.rate_name} onChange={e => setEditRate({...editRate, rate_name: e.target.value})} style={{width:'100%'}} /></td>
+                                    <td><input value={editRate.rate_type} onChange={e => setEditRate({...editRate, rate_type: e.target.value})} style={{width:'100%', fontFamily:'monospace', fontSize:12}} /></td>
+                                    <td><input type="number" step="0.01" value={editRate.rate_amount} onChange={e => setEditRate({...editRate, rate_amount: e.target.value})} style={{width:100}} /></td>
+                                    <td style={{textAlign:'right', whiteSpace:'nowrap'}}>
+                                        <button className="btn btn-primary btn-sm" onClick={saveEditRate} style={{marginRight:4}}><i className="fas fa-check"></i></button>
+                                        <button className="btn btn-outline btn-sm" onClick={() => setEditRateId(null)}><i className="fas fa-times"></i></button>
+                                    </td>
+                                </tr>
+                            ) : (
+                                <tr key={r.id}>
+                                    <td>{r.rate_name}</td>
+                                    <td className="text-sm" style={{fontFamily:'monospace', color:'var(--text-muted)'}}>{r.rate_type||'—'}</td>
+                                    <td className="money" style={{fontWeight:600}}>{isTaxRate(r) ? `${r.rate_amount}%` : `${fmt(r.rate_amount)}/hr`}</td>
+                                    <td style={{textAlign:'right', whiteSpace:'nowrap'}}>
+                                        <button className="btn btn-outline btn-sm" onClick={() => startEditRate(r)} title="Edit" style={{padding:'4px 8px', marginRight:4}}><i className="fas fa-edit"></i></button>
+                                        <button className="btn btn-outline btn-sm" onClick={() => deleteRate(r)} title="Delete"
+                                                style={{padding:'4px 8px', color:'var(--danger)', borderColor:'var(--danger)'}}><i className="fas fa-trash"></i></button>
+                                    </td>
+                                </tr>
+                            )
+                        ))}
+                        {!rates.length && <tr><td colSpan="4" className="text-muted" style={{textAlign:'center',padding:24}}>No rates yet</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+                {showAddRate && (
+                    <div style={{marginTop:12, padding:12, background:'var(--bg)', borderRadius:8, border:'1px solid var(--border)'}}>
+                        <div style={{display:'grid', gridTemplateColumns:'2fr 2fr 1fr auto', gap:8, alignItems:'end'}}>
+                            <div className="form-group" style={{margin:0}}><label>Rate Name</label><input value={newRate.rate_name} onChange={e => setNewRate({...newRate, rate_name: e.target.value})} placeholder="e.g. Detail Labor" /></div>
+                            <div className="form-group" style={{margin:0}}><label>Type slug (optional)</label><input value={newRate.rate_type} onChange={e => setNewRate({...newRate, rate_type: e.target.value})} placeholder="auto-generated if blank" style={{fontFamily:'monospace', fontSize:12}} /></div>
+                            <div className="form-group" style={{margin:0}}><label>Amount</label><input type="number" step="0.01" value={newRate.rate_amount} onChange={e => setNewRate({...newRate, rate_amount: e.target.value})} placeholder="0.00" /></div>
+                            <div style={{display:'flex', gap:6}}>
+                                <button className="btn btn-primary btn-sm" onClick={addRate}><i className="fas fa-check"></i> Add</button>
+                                <button className="btn btn-outline btn-sm" onClick={() => setShowAddRate(false)}><i className="fas fa-times"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
             <div className="card">
                 <div className="section-title"><i className="fas fa-file-export"></i> Data Export</div>
@@ -2640,6 +2775,26 @@ function TimeClock({ user }) {
 
     const elapsed = clockedIn && clockInTime ? Math.floor((tick - clockInTime.getTime()) / 1000) : 0;
     const elapsedStr = `${Math.floor(elapsed/3600)}:${String(Math.floor((elapsed%3600)/60)).padStart(2,'0')}:${String(elapsed%60).padStart(2,'0')}`;
+
+    // Worker accounts MUST be linked to an employee record to clock in (time cards
+    // are stored against employee_id, not user_id). Show a clear message instead of
+    // letting the API call fail with a confusing validation error.
+    if (!user.employee_id) {
+        return (
+            <div style={{textAlign: 'center', padding: '32px 0'}}>
+                <i className="fas fa-user-times" style={{fontSize: 56, color: 'var(--text-muted)', marginBottom: 16}}></i>
+                <div style={{fontSize: 22, fontWeight: 700, marginBottom: 12, color: 'var(--text)'}}>
+                    Account not linked to an employee
+                </div>
+                <div style={{fontSize: 15, color: 'var(--text-muted)', maxWidth: 500, margin: '0 auto', lineHeight: 1.5}}>
+                    Your login isn't connected to an Employee record yet, so the system can't record your hours.
+                    <br /><br />
+                    Ask the shop admin to open <b>Settings → User Logins</b>, click <b>Edit</b> on your row,
+                    and pick your name under <b>Linked Employee</b>.
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div style={{textAlign: 'center', padding: '16px 0'}}>
