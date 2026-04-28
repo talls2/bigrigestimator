@@ -28,6 +28,55 @@ def _has_legacy_rate_type_check(conn) -> bool:
     return "rate_type IN ('body_labor'" in row[0]
 
 
+def _has_legacy_vendor_type_check(conn) -> bool:
+    """Detect the old restrictive CHECK constraint on vendors.vendor_type."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='vendors'"
+    ).fetchone()
+    if not row or not row[0]:
+        return False
+    return "vendor_type IN ('parts'" in row[0]
+
+
+def _drop_vendor_type_check(conn) -> None:
+    """Rebuild vendors without the restrictive vendor_type CHECK."""
+    cur = conn.cursor()
+    cols_info = cur.execute("PRAGMA table_info(vendors)").fetchall()
+    col_names = [c[1] for c in cols_info]
+
+    cur.execute("PRAGMA foreign_keys = OFF")
+    try:
+        cur.execute("""
+            CREATE TABLE vendors__new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                vendor_name TEXT NOT NULL,
+                contact_name TEXT,
+                address TEXT,
+                city TEXT,
+                state TEXT,
+                zip_code TEXT,
+                phone TEXT,
+                fax TEXT,
+                email TEXT,
+                account_number TEXT,
+                vendor_type TEXT DEFAULT 'parts',
+                notes TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        new_cols_info = cur.execute("PRAGMA table_info(vendors__new)").fetchall()
+        new_col_names = {c[1] for c in new_cols_info}
+        copy_cols = [c for c in col_names if c in new_col_names]
+        copy_list = ", ".join(copy_cols)
+        cur.execute(f"INSERT INTO vendors__new ({copy_list}) SELECT {copy_list} FROM vendors")
+        cur.execute("DROP TABLE vendors")
+        cur.execute("ALTER TABLE vendors__new RENAME TO vendors")
+        conn.commit()
+    finally:
+        cur.execute("PRAGMA foreign_keys = ON")
+
+
 def _drop_shop_rates_check(conn) -> None:
     """Rebuild shop_rates without the restrictive rate_type CHECK."""
     cur = conn.cursor()
@@ -171,6 +220,12 @@ def run_migrations(conn) -> None:
     if _has_legacy_rate_type_check(conn):
         print("[migration] Removing restrictive rate_type CHECK on shop_rates")
         _drop_shop_rates_check(conn)
+
+    # Migration 003b: drop restrictive vendors.vendor_type CHECK so the user
+    # can type any role (e.g. "accountant") instead of picking from 5 fixed values.
+    if _has_legacy_vendor_type_check(conn):
+        print("[migration] Removing restrictive vendor_type CHECK on vendors")
+        _drop_vendor_type_check(conn)
 
     # Migration 004: add configurable sales_tax_rate to shop_rates if missing.
     row = conn.execute(

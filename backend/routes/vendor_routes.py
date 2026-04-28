@@ -60,3 +60,15 @@ def update_vendor(vendor_id: int, data: VendorIn):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{vendor_id}")
+def delete_vendor(vendor_id: int):
+    """Delete a vendor (refuses if referenced by RO lines or part invoices)."""
+    try:
+        service.delete_vendor(vendor_id)
+        return {"message": "Vendor deleted successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

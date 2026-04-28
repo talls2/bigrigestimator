@@ -2073,10 +2073,32 @@ function VendorsPage({ navigate }) {
     };
 
     const save = async () => {
-        if (editId) await api(`/vendors/${editId}`, { method: 'PUT', body: form });
-        else await api('/vendors', { method: 'POST', body: form });
-        setShowForm(false); setEditId(null); setForm(emptyVnd); load();
+        try {
+            if (editId) await api(`/vendors/${editId}`, { method: 'PUT', body: form });
+            else await api('/vendors', { method: 'POST', body: form });
+            setShowForm(false); setEditId(null); setForm(emptyVnd); load();
+        } catch (err) {
+            alert('Failed to save vendor: ' + (err.message || err));
+        }
     };
+
+    const deleteVendor = async (vnd, e) => {
+        e.stopPropagation();
+        if (!confirm(`Delete vendor "${vnd.vendor_name}"? This can't be undone.`)) return;
+        try {
+            await api(`/vendors/${vnd.id}`, { method: 'DELETE' });
+            load();
+        } catch (err) {
+            alert(err.message || String(err));
+        }
+    };
+
+    // Build a unique list of types currently in use, plus the original presets,
+    // for the type-input datalist suggestions.
+    const typeSuggestions = Array.from(new Set([
+        'parts','paint','materials','sublet','other',
+        ...vendors.map(v => v.vendor_type).filter(Boolean)
+    ])).sort();
 
     return (
         <div>
@@ -2086,12 +2108,20 @@ function VendorsPage({ navigate }) {
             </div>
             <div className="search-bar"><input placeholder="Search vendors..." value={search} onChange={e => setSearch(e.target.value)} /></div>
             <div className="card"><div className="table-wrapper">
-                <table><thead><tr><th>Vendor</th><th>Type</th><th>Contact</th><th>Phone</th><th>City</th><th></th></tr></thead>
+                <table><thead><tr><th>Vendor</th><th>Type</th><th>Contact</th><th>Phone</th><th>City</th><th style={{width:90}}></th></tr></thead>
                 <tbody>{vendors.map(v => (
                     <tr key={v.id} className="clickable" onClick={() => openEdit(v)}>
                         <td style={{fontWeight:500}}>{v.vendor_name}</td><td><Badge status={v.vendor_type}/></td>
                         <td>{v.contact_name||'—'}</td><td>{v.phone||'—'}</td><td>{v.city||'—'}</td>
-                        <td style={{textAlign:'right'}}><i className="fas fa-edit text-muted"></i></td>
+                        <td style={{textAlign:'right', whiteSpace:'nowrap'}}>
+                            <button className="btn btn-outline btn-sm" onClick={(e) => { e.stopPropagation(); openEdit(v); }} title="Edit" style={{padding:'4px 8px', marginRight:4}}>
+                                <i className="fas fa-edit"></i>
+                            </button>
+                            <button className="btn btn-outline btn-sm" onClick={(e) => deleteVendor(v, e)} title="Delete"
+                                    style={{padding:'4px 8px', color:'var(--danger)', borderColor:'var(--danger)'}}>
+                                <i className="fas fa-trash"></i>
+                            </button>
+                        </td>
                     </tr>
                 ))}
                 {!vendors.length && <tr><td colSpan="6" className="text-muted" style={{textAlign:'center',padding:32}}>No vendors found</td></tr>}
@@ -2100,12 +2130,16 @@ function VendorsPage({ navigate }) {
             <Modal open={showForm} onClose={() => setShowForm(false)} title={editId ? 'Edit Vendor' : 'New Vendor'}>
                 <div className="form-grid">
                     <div className="form-group"><label>Vendor Name *</label><input value={form.vendor_name} onChange={e => setForm({...form, vendor_name: e.target.value})} /></div>
-                    <div className="form-group"><label>Type</label>
-                        <select value={form.vendor_type} onChange={e => setForm({...form, vendor_type: e.target.value})}>
-                            <option value="parts">Parts</option><option value="paint">Paint</option>
-                            <option value="materials">Materials</option><option value="sublet">Sublet</option>
-                            <option value="other">Other</option>
-                        </select>
+                    <div className="form-group">
+                        <label>Type</label>
+                        <input list="vendor-type-options"
+                               value={form.vendor_type}
+                               onChange={e => setForm({...form, vendor_type: e.target.value})}
+                               placeholder="parts, paint, accountant, towing…" />
+                        <datalist id="vendor-type-options">
+                            {typeSuggestions.map(t => <option key={t} value={t} />)}
+                        </datalist>
+                        <div className="text-muted" style={{fontSize:11, marginTop:4}}>Pick a suggestion or type your own.</div>
                     </div>
                     <div className="form-group"><label>Contact Name</label><input value={form.contact_name} onChange={e => setForm({...form, contact_name: e.target.value})} /></div>
                     <div className="form-group"><label>Phone</label><input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} /></div>

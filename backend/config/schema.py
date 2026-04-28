@@ -128,8 +128,7 @@ TABLES = [
         fax TEXT,
         email TEXT,
         account_number TEXT,
-        vendor_type TEXT DEFAULT 'parts'
-            CHECK(vendor_type IN ('parts','paint','materials','sublet','other')),
+        vendor_type TEXT DEFAULT 'parts',
         notes TEXT,
         created_at TEXT DEFAULT (datetime('now')),
         updated_at TEXT DEFAULT (datetime('now'))
