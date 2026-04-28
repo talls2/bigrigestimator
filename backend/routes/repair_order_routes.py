@@ -66,11 +66,18 @@ class StatusUpdate(BaseModel):
     status: str
 
 
+class TeamMemberIn(BaseModel):
+    employee_id: int
+    role: str
+    notes: Optional[str] = None
+
+
 @router.get("")
-def list_repair_orders(status: Optional[str] = Query(None), search: Optional[str] = Query(None)):
-    """List repair orders with optional status and search filtering."""
+def list_repair_orders(status: Optional[str] = Query(None), search: Optional[str] = Query(None),
+                       assigned_to: Optional[int] = Query(None)):
+    """List repair orders, optionally filtered by status, search, or worker assignment."""
     try:
-        ros = service.list_ros(status=status, search=search)
+        ros = service.list_ros(status=status, search=search, assigned_to=assigned_to)
         return ros
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -132,6 +139,37 @@ def add_repair_order_payment(ro_id: int, data: PaymentIn):
         return {"id": payment_id, "message": "Payment added successfully"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{ro_id}/team")
+def list_ro_team(ro_id: int):
+    """List the team assigned to this RO (workers + roles)."""
+    try:
+        return service.list_team(ro_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{ro_id}/team")
+def add_ro_team_member(ro_id: int, data: TeamMemberIn):
+    """Add a worker to this RO's team with a role label (free-text)."""
+    try:
+        assignment_id = service.add_team_member(ro_id, data.employee_id, data.role, data.notes)
+        return {"id": assignment_id, "message": "Team member added"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{ro_id}/team/{assignment_id}")
+def remove_ro_team_member(ro_id: int, assignment_id: int):
+    """Remove a single team-member assignment from this RO."""
+    try:
+        service.remove_team_member(ro_id, assignment_id)
+        return {"message": "Team member removed"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

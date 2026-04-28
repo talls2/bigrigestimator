@@ -99,6 +99,7 @@ class EmployeeService:
             ("repair_orders",  "estimator_id = ? OR technician_id = ? OR painter_id = ?", "repair order(s)"),
             ("estimates",      "estimator_id = ?",                                          "estimate(s)"),
             ("ro_lines",       "assigned_tech_id = ?",                                      "RO line assignment(s)"),
+            ("ro_assignments", "employee_id = ?",                                           "RO team assignment(s)"),
             ("time_cards",     "employee_id = ?",                                           "time card(s)"),
             ("flag_pay",       "employee_id = ?",                                           "flag pay record(s)"),
         ]

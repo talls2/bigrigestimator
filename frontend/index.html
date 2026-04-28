@@ -1481,21 +1481,42 @@ function RODetail({ id, navigate }) {
     const [showPayment, setShowPayment] = useState(false);
     const [payForm, setPayForm] = useState({amount:'',payment_method:'insurance',reference_number:'',payer_name:''});
     const [employees, setEmployees] = useState([]);
+    const [team, setTeam] = useState([]);
+    const [newTeamMember, setNewTeamMember] = useState({employee_id:'', role:''});
 
     const load = () => api(`/repair-orders/${id}`).then(setRo);
-    useEffect(() => { load(); }, [id]);
+    const loadTeam = () => api(`/repair-orders/${id}/team`).then(setTeam).catch(() => setTeam([]));
+    useEffect(() => { load(); loadTeam(); }, [id]);
     useEffect(() => { api('/employees').then(setEmployees).catch(() => setEmployees([])); }, []);
     if (!ro) return <div className="empty-state"><i className="fas fa-spinner fa-spin"></i></div>;
 
-    const assignTeam = async (field, value) => {
+    const addTeamMember = async () => {
+        if (!newTeamMember.employee_id || !newTeamMember.role) {
+            return alert('Pick a worker and type their role.');
+        }
         try {
-            await api(`/repair-orders/${id}`, { method: 'PUT', body: {
-                customer_id: ro.customer_id,
-                [field]: value ? parseInt(value) : null,
+            await api(`/repair-orders/${id}/team`, { method: 'POST', body: {
+                employee_id: parseInt(newTeamMember.employee_id),
+                role: newTeamMember.role.trim(),
             }});
-            load();
-        } catch (err) { alert('Failed to update assignment: ' + (err.message || err)); }
+            setNewTeamMember({employee_id:'', role:''});
+            loadTeam();
+        } catch (err) { alert('Failed to add: ' + (err.message || err)); }
     };
+
+    const removeTeamMember = async (assignmentId) => {
+        if (!confirm('Remove this team member?')) return;
+        try {
+            await api(`/repair-orders/${id}/team/${assignmentId}`, { method: 'DELETE' });
+            loadTeam();
+        } catch (err) { alert('Failed to remove: ' + (err.message || err)); }
+    };
+
+    // Suggest the common shop roles plus any roles already used on this RO
+    const roleSuggestions = Array.from(new Set([
+        'estimator','technician','painter','body tech','helper','detailer','parts',
+        ...team.map(t => t.role).filter(Boolean),
+    ]));
 
     const addPayment = async () => {
         await api(`/repair-orders/${id}/payments`, { method: 'POST', body: { ...payForm, amount: parseFloat(payForm.amount) } });
@@ -1567,28 +1588,72 @@ function RODetail({ id, navigate }) {
                     <div className="detail-row"><span className="detail-label">License</span><span className="detail-value">{ro.license_plate||'—'}</span></div>
                 </div>
                 <div className="card">
-                    <div className="section-title"><i className="fas fa-shield-halved"></i> Insurance & Team</div>
+                    <div className="section-title"><i className="fas fa-shield-halved"></i> Insurance</div>
                     <div className="detail-row"><span className="detail-label">Insurance</span><span className="detail-value">{ro.insurance_name||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Claim #</span><span className="detail-value">{ro.claim_number||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Policy #</span><span className="detail-value">{ro.policy_number||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Deductible</span><span className="detail-value money">{fmt(ro.deductible)}</span></div>
-                    {[
-                        ['estimator_id', 'Estimator'],
-                        ['technician_id', 'Technician'],
-                        ['painter_id', 'Painter'],
-                    ].map(([field, label]) => (
-                        <div className="detail-row" key={field}>
-                            <span className="detail-label">{label}</span>
-                            <span className="detail-value" style={{minWidth:0, flex:1, marginLeft:12}}>
-                                <select value={ro[field] || ''} onChange={e => assignTeam(field, e.target.value)}
-                                        style={{width:'100%', padding:'4px 8px', fontSize:13}}>
-                                    <option value="">— Unassigned —</option>
-                                    {employees.filter(e => e.is_active).map(e => (
-                                        <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>
-                                    ))}
-                                </select>
-                            </span>
+                    {!(ro.insurance_name || ro.claim_number || ro.deductible > 0) && (
+                        <div className="text-muted" style={{padding:8, fontSize:13}}>Customer pay — no insurance on file.</div>
+                    )}
+                </div>
+            </div>
+
+            {/* ── Team card (full width) ── */}
+            <div className="card mt-4">
+                <div className="card-header" style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                    <div className="section-title" style={{margin:0}}><i className="fas fa-users"></i> Team ({team.length})</div>
+                    <span className="text-muted text-sm">Workers see assigned ROs in their TecStation "My Jobs" grid.</span>
+                </div>
+                <div className="table-wrapper">
+                    <table>
+                        <thead><tr><th>Worker</th><th>Role</th><th>Added</th><th style={{width:50}}></th></tr></thead>
+                        <tbody>
+                            {team.map(m => (
+                                <tr key={m.id}>
+                                    <td style={{fontWeight:500}}>{m.first_name} {m.last_name} {m.employee_code && <span className="text-muted text-sm">({m.employee_code})</span>}</td>
+                                    <td><Badge status={m.role}/></td>
+                                    <td className="text-sm text-muted">{m.assigned_at ? new Date(m.assigned_at).toLocaleDateString() : '—'}</td>
+                                    <td style={{textAlign:'right'}}>
+                                        <button className="btn btn-outline btn-sm" onClick={() => removeTeamMember(m.id)} title="Remove"
+                                                style={{padding:'4px 8px', color:'var(--danger)', borderColor:'var(--danger)'}}>
+                                            <i className="fas fa-times"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                            {!team.length && (
+                                <tr><td colSpan="4" className="text-muted" style={{textAlign:'center', padding:16, fontSize:13}}>
+                                    No one assigned yet — add workers below.
+                                </td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+                <div style={{marginTop:12, padding:12, background:'var(--bg)', borderRadius:8, border:'1px dashed var(--border)'}}>
+                    <div style={{display:'grid', gridTemplateColumns:'2fr 2fr auto', gap:8, alignItems:'end'}}>
+                        <div className="form-group" style={{margin:0}}>
+                            <label>Worker</label>
+                            <select value={newTeamMember.employee_id} onChange={e => setNewTeamMember({...newTeamMember, employee_id: e.target.value})}>
+                                <option value="">— Select worker —</option>
+                                {employees.filter(e => e.is_active).map(e => (
+                                    <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>
+                                ))}
+                            </select>
                         </div>
-                    ))}
+                        <div className="form-group" style={{margin:0}}>
+                            <label>Role</label>
+                            <input list="ro-team-role-options" value={newTeamMember.role}
+                                   onChange={e => setNewTeamMember({...newTeamMember, role: e.target.value})}
+                                   placeholder="e.g. body tech, painter, helper" />
+                            <datalist id="ro-team-role-options">
+                                {roleSuggestions.map(r => <option key={r} value={r} />)}
+                            </datalist>
+                        </div>
+                        <button className="btn btn-primary" onClick={addTeamMember} disabled={!newTeamMember.employee_id || !newTeamMember.role}>
+                            <i className="fas fa-plus"></i> Add Worker
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -2721,12 +2786,11 @@ function TimeClock({ user }) {
     }, [user.employee_id]);
 
     useEffect(() => {
-        api('/repair-orders?status=in_progress').then(ros => {
-            const mine = ros.filter(ro =>
-                ro.technician_id === user.employee_id ||
-                ro.painter_id === user.employee_id
-            );
-            setMyJobs(mine);
+        if (!user.employee_id) return;
+        // Show ROs assigned to this worker, regardless of status (so they can clock onto open or in-progress jobs).
+        api(`/repair-orders?assigned_to=${user.employee_id}`).then(ros => {
+            const active = ros.filter(r => ['open','in_progress'].includes(r.status));
+            setMyJobs(active);
         }).catch(() => {});
     }, [user.employee_id]);
 

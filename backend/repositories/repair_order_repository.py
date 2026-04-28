@@ -10,7 +10,7 @@ class RepairOrderRepository(BaseRepository):
     table_name = "repair_orders"
     order_by = "created_at DESC"
 
-    def list_with_details(self, status=None, search=None, limit=500):
+    def list_with_details(self, status=None, search=None, assigned_to=None, limit=500):
         query = """
             SELECT ro.*, c.first_name, c.last_name, c.company_name,
                    v.year AS vehicle_year, v.make AS vehicle_make,
@@ -30,6 +30,12 @@ class RepairOrderRepository(BaseRepository):
                 OR c.last_name LIKE ? OR c.company_name LIKE ?
                 OR v.vin LIKE ? OR ro.claim_number LIKE ?)"""
             params.extend([t] * 6)
+        if assigned_to:
+            # Match either the legacy fixed columns or the new ro_assignments join.
+            query += """ AND (ro.estimator_id = ? OR ro.technician_id = ? OR ro.painter_id = ?
+                OR EXISTS (SELECT 1 FROM ro_assignments a
+                           WHERE a.ro_id = ro.id AND a.employee_id = ?))"""
+            params.extend([assigned_to] * 4)
         query += f" ORDER BY ro.{self.order_by} LIMIT ?"
         params.append(limit)
         with get_db() as db:

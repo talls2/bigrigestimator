@@ -14,7 +14,7 @@ class RepairOrderService:
         self.repo = RepairOrderRepository()
         self.payment_repo = PaymentRepository()
 
-    def list_ros(self, status: str | None = None, search: str | None = None) -> list[dict]:
+    def list_ros(self, status: str | None = None, search: str | None = None, assigned_to: int | None = None) -> list[dict]:
         """
         List repair orders with optional status and search filtering.
 
@@ -25,7 +25,7 @@ class RepairOrderService:
         Returns:
             List of repair order dictionaries with customer and vehicle info
         """
-        return self.repo.list_with_details(status=status, search=search)
+        return self.repo.list_with_details(status=status, search=search, assigned_to=assigned_to)
 
     def get_ro(self, ro_id: int) -> dict | None:
         """
@@ -155,6 +155,50 @@ class RepairOrderService:
         self.repo.recalc_totals(ro_id)
 
         return payment_id
+
+    # ── Team assignments ──
+    def list_team(self, ro_id: int) -> list[dict]:
+        """Return the list of (employee, role) assignments for an RO, with employee names."""
+        from config.database import get_db
+        with get_db() as db:
+            rows = db.execute(
+                """SELECT a.id, a.ro_id, a.employee_id, a.role, a.notes, a.assigned_at,
+                          e.first_name, e.last_name, e.employee_code
+                   FROM ro_assignments a
+                   LEFT JOIN employees e ON e.id = a.employee_id
+                   WHERE a.ro_id = ?
+                   ORDER BY a.assigned_at""",
+                (ro_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def add_team_member(self, ro_id: int, employee_id: int, role: str, notes: str | None = None) -> int:
+        """Add an employee to an RO's team with a role label (free text)."""
+        existing = self.repo.get_by_id(ro_id)
+        if not existing:
+            raise ValueError(f"Repair order {ro_id} not found")
+        if not employee_id:
+            raise ValueError("employee_id is required")
+        if not role or not role.strip():
+            raise ValueError("role is required")
+        from config.database import get_db
+        with get_db() as db:
+            cur = db.execute(
+                "INSERT INTO ro_assignments (ro_id, employee_id, role, notes) VALUES (?, ?, ?, ?)",
+                (ro_id, int(employee_id), role.strip(), notes),
+            )
+            db.commit()
+            return cur.lastrowid
+
+    def remove_team_member(self, ro_id: int, assignment_id: int) -> None:
+        """Remove a single team member assignment."""
+        from config.database import get_db
+        with get_db() as db:
+            db.execute(
+                "DELETE FROM ro_assignments WHERE id = ? AND ro_id = ?",
+                (assignment_id, ro_id),
+            )
+            db.commit()
 
     def update_status(self, ro_id: int, new_status: str) -> None:
         """

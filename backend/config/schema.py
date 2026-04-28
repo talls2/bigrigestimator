@@ -266,6 +266,16 @@ TABLES = [
         created_at TEXT DEFAULT (datetime('now'))
     )""",
 
+    # ── RO Team Assignments (many workers per RO, free-text role) ──
+    """CREATE TABLE IF NOT EXISTS ro_assignments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ro_id INTEGER NOT NULL REFERENCES repair_orders(id) ON DELETE CASCADE,
+        employee_id INTEGER NOT NULL REFERENCES employees(id),
+        role TEXT NOT NULL,
+        notes TEXT,
+        assigned_at TEXT DEFAULT (datetime('now'))
+    )""",
+
     # ── Payments ──
     """CREATE TABLE IF NOT EXISTS payments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -437,6 +447,8 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_ro_number ON repair_orders(ro_number)",
     "CREATE INDEX IF NOT EXISTS idx_payments_ro ON payments(ro_id)",
     "CREATE INDEX IF NOT EXISTS idx_time_cards_employee ON time_cards(employee_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ro_assignments_ro ON ro_assignments(ro_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ro_assignments_employee ON ro_assignments(employee_id)",
     "CREATE INDEX IF NOT EXISTS idx_flag_pay_employee ON flag_pay(employee_id)",
     "CREATE INDEX IF NOT EXISTS idx_part_invoices_vendor ON part_invoices(vendor_id)",
     "CREATE INDEX IF NOT EXISTS idx_activity_log_entity ON activity_log(entity_type, entity_id)",

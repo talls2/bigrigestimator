@@ -211,6 +211,17 @@ class EstimateService:
         # Recompute totals so any tax-rate change since the estimate is reflected.
         self.ro_repo.recalc_totals(ro_id)
 
+        # Seed the RO team from the estimator on the estimate, if any, so it shows
+        # up under "Team" on the RO detail without manual re-entry.
+        if estimate.get("estimator_id"):
+            from config.database import get_db
+            with get_db() as db:
+                db.execute(
+                    "INSERT INTO ro_assignments (ro_id, employee_id, role) VALUES (?, ?, ?)",
+                    (ro_id, estimate["estimator_id"], "estimator"),
+                )
+                db.commit()
+
         # Mark estimate as converted
         self.estimate_repo.update(estimate_id, {"status": "converted"})
 

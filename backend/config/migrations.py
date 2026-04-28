@@ -227,6 +227,42 @@ def run_migrations(conn) -> None:
         print("[migration] Removing restrictive vendor_type CHECK on vendors")
         _drop_vendor_type_check(conn)
 
+    # Migration 003c: ro_assignments join table for multi-worker assignment.
+    # CREATE IF NOT EXISTS already handles fresh installs via TABLES, but on
+    # a live DB we also back-fill from the legacy fixed columns the first time.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ro_assignments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ro_id INTEGER NOT NULL REFERENCES repair_orders(id) ON DELETE CASCADE,
+            employee_id INTEGER NOT NULL REFERENCES employees(id),
+            role TEXT NOT NULL,
+            notes TEXT,
+            assigned_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ro_assignments_ro ON ro_assignments(ro_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_ro_assignments_employee ON ro_assignments(employee_id)")
+    conn.commit()
+
+    # Back-fill assignments from legacy fixed columns — only if the table is empty.
+    has_any = conn.execute("SELECT COUNT(*) FROM ro_assignments").fetchone()[0]
+    if not has_any:
+        for col, role in (("estimator_id","estimator"), ("technician_id","technician"), ("painter_id","painter")):
+            try:
+                rows = conn.execute(
+                    f"SELECT id, {col} FROM repair_orders WHERE {col} IS NOT NULL"
+                ).fetchall()
+            except Exception:
+                rows = []
+            for ro_id, emp_id in rows:
+                conn.execute(
+                    "INSERT INTO ro_assignments (ro_id, employee_id, role) VALUES (?, ?, ?)",
+                    (ro_id, emp_id, role),
+                )
+        conn.commit()
+        if any(True for _ in conn.execute("SELECT 1 FROM ro_assignments LIMIT 1")):
+            print("[migration] Back-filled ro_assignments from legacy estimator/technician/painter columns")
+
     # Migration 004: add configurable sales_tax_rate to shop_rates if missing.
     row = conn.execute(
         "SELECT id FROM shop_rates WHERE rate_type = 'sales_tax_rate'"
