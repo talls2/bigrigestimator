@@ -82,30 +82,36 @@ class EmployeeService:
 
     def delete_employee(self, employee_id: int) -> None:
         """
-        Delete an employee — but only if nothing depends on them.
+        Delete an employee.
+
+        - Hard refs (active work, payroll, history) BLOCK the delete with a useful message.
+        - Soft refs (user link, production-move logs) get auto-NULLed so the delete proceeds.
 
         Raises:
-            ValueError: If the employee doesn't exist or is referenced by other records.
+            ValueError: If the employee doesn't exist or has hard references.
         """
         existing = self.repo.get_by_id(employee_id)
         if not existing:
             raise ValueError(f"Employee {employee_id} not found")
 
-        # Tables that reference employees(id). Each entry: (table, where-clause, label).
-        ref_checks = [
+        # HARD refs — refuse to delete; protects financial/historical data.
+        hard_checks = [
             ("repair_orders",  "estimator_id = ? OR technician_id = ? OR painter_id = ?", "repair order(s)"),
             ("estimates",      "estimator_id = ?",                                          "estimate(s)"),
             ("ro_lines",       "assigned_tech_id = ?",                                      "RO line assignment(s)"),
             ("time_cards",     "employee_id = ?",                                           "time card(s)"),
             ("flag_pay",       "employee_id = ?",                                           "flag pay record(s)"),
-            ("users",          "employee_id = ?",                                           "user account(s)"),
-            ("vehicle_moves",  "moved_by = ?",                                              "production move(s)"),
+        ]
+
+        # SOFT refs — auto-NULL these on delete; they're convenience links not data integrity.
+        soft_unlinks = [
+            ("users",         "employee_id"),
+            ("vehicle_moves", "moved_by"),
         ]
 
         in_use = []
         with get_db() as db:
-            for table, where, label in ref_checks:
-                # Some tables may not exist on older installs — skip gracefully.
+            for table, where, label in hard_checks:
                 try:
                     n_args = where.count("?")
                     n = db.execute(
@@ -123,5 +129,14 @@ class EmployeeService:
                 f"Cannot delete {name} — they're referenced by " + ", ".join(in_use)
                 + ". Set their status to Inactive instead, which keeps the historical data intact."
             )
+
+        # Auto-unlink soft refs, then delete.
+        with get_db() as db:
+            for table, col in soft_unlinks:
+                try:
+                    db.execute(f"UPDATE {table} SET {col} = NULL WHERE {col} = ?", (employee_id,))
+                except Exception:
+                    pass  # table may not exist on older installs
+            db.commit()
 
         self.repo.delete(employee_id)
