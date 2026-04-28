@@ -2981,15 +2981,10 @@ function WorkerView({ user, onLogout }) {
                      onClick={() => setWorkerTab('my-jobs')}>
                     <i className="fas fa-wrench"></i> My Jobs
                 </div>
-                <div className={`worker-tab ${workerTab === 'board' ? 'active' : ''}`}
-                     onClick={() => setWorkerTab('board')}>
-                    <i className="fas fa-columns"></i> Shop Board
-                </div>
             </div>
-            <div className="worker-main" style={{maxWidth: workerTab === 'board' ? '100%' : '900px'}}>
+            <div className="worker-main" style={{maxWidth: '900px'}}>
                 {workerTab === 'clock' && <TimeClock user={user} />}
                 {workerTab === 'my-jobs' && <MyJobsView user={user} />}
-                {workerTab === 'board' && <ShopBoardView user={user} />}
             </div>
         </div>
     );
