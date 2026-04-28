@@ -1777,6 +1777,18 @@ function EmployeesPage({ navigate }) {
         }
     };
 
+    const deleteEmployee = async (emp, e) => {
+        e.stopPropagation();
+        const name = `${emp.first_name||''} ${emp.last_name||''}`.trim() || `#${emp.id}`;
+        if (!confirm(`Delete employee "${name}"? This can't be undone.\n\nIf they have time cards or work history, the system will refuse — set them to Inactive instead.`)) return;
+        try {
+            await api(`/employees/${emp.id}`, { method: 'DELETE' });
+            load();
+        } catch (err) {
+            alert(err.message || String(err));
+        }
+    };
+
     return (
         <div>
             <div className="page-header">
@@ -1784,7 +1796,7 @@ function EmployeesPage({ navigate }) {
                 <button className="btn btn-primary" onClick={openNew}><i className="fas fa-plus"></i> New Employee</button>
             </div>
             <div className="card"><div className="table-wrapper">
-                <table><thead><tr><th>Code</th><th>Name</th><th>Role</th><th>Hourly Rate</th><th>Flag Rate</th><th>Status</th><th></th></tr></thead>
+                <table><thead><tr><th>Code</th><th>Name</th><th>Role</th><th>Hourly Rate</th><th>Flag Rate</th><th>Status</th><th style={{width:90}}></th></tr></thead>
                 <tbody>{employees.map(e => (
                     <tr key={e.id} className="clickable" onClick={() => openEdit(e)}>
                         <td style={{fontWeight:600}}>{e.employee_code}</td>
@@ -1793,7 +1805,15 @@ function EmployeesPage({ navigate }) {
                         <td className="money">{e.hourly_rate > 0 ? fmt(e.hourly_rate) : '—'}</td>
                         <td className="money">{e.flag_rate > 0 ? fmt(e.flag_rate) : '—'}</td>
                         <td>{e.is_active ? <span className="text-green">Active</span> : <span className="text-red">Inactive</span>}</td>
-                        <td style={{textAlign:'right'}}><i className="fas fa-edit text-muted"></i></td>
+                        <td style={{textAlign:'right', whiteSpace:'nowrap'}}>
+                            <button className="btn btn-outline btn-sm" onClick={(ev) => { ev.stopPropagation(); openEdit(e); }} title="Edit" style={{padding:'4px 8px', marginRight:4}}>
+                                <i className="fas fa-edit"></i>
+                            </button>
+                            <button className="btn btn-outline btn-sm" onClick={(ev) => deleteEmployee(e, ev)} title="Delete"
+                                    style={{padding:'4px 8px', color:'var(--danger)', borderColor:'var(--danger)'}}>
+                                <i className="fas fa-trash"></i>
+                            </button>
+                        </td>
                     </tr>
                 ))}
                 {!employees.length && <tr><td colSpan="7" className="text-muted" style={{textAlign:'center',padding:32}}>No employees found</td></tr>}
@@ -1900,6 +1920,16 @@ function UsersPage({ user: currentUser }) {
         setNewPin(''); setNewPin2(''); setError('');
     };
 
+    const deleteUser = async (u) => {
+        if (!confirm(`Delete user "${u.display_name || u.username}"? This permanently removes the login.`)) return;
+        try {
+            await api(`/auth/users/${u.id}`, { method: 'DELETE' });
+            load();
+        } catch (err) {
+            alert(err.message || String(err));
+        }
+    };
+
     const submitPinReset = async () => {
         setError('');
         if (!newPin || newPin.length < 4) return setError('PIN must be at least 4 digits');
@@ -1942,11 +1972,16 @@ function UsersPage({ user: currentUser }) {
                                     <td className="text-sm text-muted">{u.last_login ? new Date(u.last_login).toLocaleString() : 'Never'}</td>
                                     <td>{u.is_active ? <span className="text-green">Active</span> : <span className="text-red">Disabled</span>}</td>
                                     <td style={{textAlign:'right', whiteSpace:'nowrap'}}>
-                                        <button className="btn btn-outline btn-sm" onClick={() => openEdit(u)} style={{marginRight:6}}>
+                                        <button className="btn btn-outline btn-sm" onClick={() => openEdit(u)} style={{marginRight:6}} title="Edit">
                                             <i className="fas fa-edit"></i> Edit
                                         </button>
-                                        <button className="btn btn-outline btn-sm" onClick={() => openResetPin(u)}>
-                                            <i className="fas fa-key"></i> Reset PIN
+                                        <button className="btn btn-outline btn-sm" onClick={() => openResetPin(u)} style={{marginRight:6}} title="Reset PIN">
+                                            <i className="fas fa-key"></i> PIN
+                                        </button>
+                                        <button className="btn btn-outline btn-sm" onClick={() => deleteUser(u)} title="Delete user"
+                                                style={{color:'var(--danger)', borderColor:'var(--danger)', padding:'4px 8px'}}
+                                                disabled={currentUser && u.id === currentUser.id}>
+                                            <i className="fas fa-trash"></i>
                                         </button>
                                     </td>
                                 </tr>

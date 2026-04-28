@@ -126,3 +126,37 @@ class AuthService:
         if not clean:
             return
         self.repo.update(user_id, clean)
+
+    def delete_user(self, user_id: int, requester_id: int) -> None:
+        """
+        Delete a user account. Cleans up sessions automatically.
+
+        Refuses to:
+          - delete yourself (so you can't lock yourself out by accident)
+          - delete the last remaining admin
+
+        Raises:
+            ValueError: on any of the above checks.
+        """
+        user = self.repo.get_by_id(user_id)
+        if not user:
+            raise ValueError("User not found")
+
+        if user_id == requester_id:
+            raise ValueError("You can't delete the account you're signed in with. Sign in as a different admin first.")
+
+        if user.get("role") == "admin":
+            from config.database import get_db
+            with get_db() as db:
+                admin_count = db.execute(
+                    "SELECT COUNT(*) AS n FROM users WHERE role = 'admin' AND is_active = 1"
+                ).fetchone()["n"]
+            if admin_count <= 1:
+                raise ValueError("Can't delete the last admin account. Promote another user to admin first.")
+
+        # Drop sessions, then the user.
+        from config.database import get_db
+        with get_db() as db:
+            db.execute("DELETE FROM user_sessions WHERE user_id = ?", (user_id,))
+            db.commit()
+        self.repo.delete(user_id)

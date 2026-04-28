@@ -162,6 +162,19 @@ def reset_user_pin(user_id: int, data: PinResetIn, request: Request):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, request: Request):
+    """Admin-only: delete a user (refuses self-delete and last-admin delete)."""
+    user = require_auth(request)
+    if user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can delete users")
+    try:
+        service.delete_user(user_id, requester_id=user["id"])
+        return {"message": "User deleted successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.post("/change-pin")
 def change_my_pin(data: PinChangeIn, request: Request):
     """Self-service: any logged-in user can change their own PIN if they know the current one."""

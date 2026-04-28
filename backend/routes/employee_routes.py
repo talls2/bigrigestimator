@@ -76,3 +76,15 @@ def update_employee(employee_id: int, data: EmployeeIn):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{employee_id}")
+def delete_employee(employee_id: int):
+    """Delete an employee (refuses if referenced by ROs, time cards, etc.)."""
+    try:
+        service.delete_employee(employee_id)
+        return {"message": "Employee deleted successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
