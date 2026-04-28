@@ -1499,6 +1499,26 @@ function RODetail({ id, navigate }) {
         } catch (err) { alert('Failed to update tax exemption: ' + (err.message || err)); }
     };
 
+    const changeStatus = async (newStatus) => {
+        if (!newStatus || newStatus === ro.status) return;
+
+        // Friendly confirmations for the big transitions.
+        const labels = {open:'Open', in_progress:'In Progress', on_hold:'On Hold',
+                        completed:'Completed', delivered:'Delivered', closed:'Closed'};
+        let prompt = `Change status from "${labels[ro.status]||ro.status}" to "${labels[newStatus]||newStatus}"?`;
+        if (newStatus === 'closed' && ro.balance_due > 0) {
+            prompt = `This RO has a balance due of ${fmt(ro.balance_due)}. Close it anyway?`;
+        } else if (newStatus === 'delivered' && ro.balance_due > 0) {
+            prompt = `Mark as delivered with a ${fmt(ro.balance_due)} balance still due?`;
+        }
+        if (!confirm(prompt)) return;
+
+        try {
+            await api(`/repair-orders/${id}/status`, { method: 'PATCH', body: { status: newStatus } });
+            load();
+        } catch (err) { alert('Failed to update status: ' + (err.message || err)); }
+    };
+
     return (
         <div>
             <div className="page-header">
@@ -1507,6 +1527,16 @@ function RODetail({ id, navigate }) {
                     <h2>{ro.ro_number}</h2>
                     <Badge status={ro.status} />
                     <Badge status={ro.priority} />
+                    <select value={ro.status} onChange={e => changeStatus(e.target.value)}
+                            title="Change status"
+                            style={{padding:'6px 10px', fontSize:13, marginLeft:4}}>
+                        <option value="open">Open</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="on_hold">On Hold</option>
+                        <option value="completed">Completed</option>
+                        <option value="delivered">Delivered</option>
+                        <option value="closed">Closed</option>
+                    </select>
                 </div>
                 <div className="flex gap-2">
                     <a href={`${API}/exports/ro/${id}/invoice-pdf`} target="_blank" className="btn btn-primary"><i className="fas fa-file-invoice"></i> Invoice PDF</a>

@@ -158,11 +158,12 @@ class RepairOrderService:
 
     def update_status(self, ro_id: int, new_status: str) -> None:
         """
-        Update the status of a repair order.
+        Update the status of a repair order, auto-stamping the corresponding
+        milestone date if it isn't already set.
 
         Args:
             ro_id: Repair order ID
-            new_status: New status value (e.g., 'open', 'in_progress', 'completed', 'closed')
+            new_status: 'open', 'in_progress', 'on_hold', 'completed', 'delivered', 'closed'
 
         Raises:
             ValueError: If repair order not found
@@ -171,4 +172,20 @@ class RepairOrderService:
         if not existing:
             raise ValueError(f"Repair order {ro_id} not found")
 
-        self.repo.update(ro_id, {"status": new_status})
+        from datetime import date
+        today = date.today().isoformat()
+
+        # Map status → date column to auto-stamp on transition.
+        date_col_map = {
+            "in_progress": "repair_start_date",
+            "completed":   "actual_complete_date",
+            "delivered":   "delivered_date",
+            "closed":      "closed_date",
+        }
+
+        update = {"status": new_status}
+        col = date_col_map.get(new_status)
+        if col and not existing.get(col):
+            update[col] = today
+
+        self.repo.update(ro_id, update)
