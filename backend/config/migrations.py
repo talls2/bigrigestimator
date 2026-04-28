@@ -206,6 +206,11 @@ def run_migrations(conn) -> None:
     _add_column(conn, "estimates",      "tax_exempt", "INTEGER DEFAULT 0")
     _add_column(conn, "repair_orders",  "tax_exempt", "INTEGER DEFAULT 0")
 
+    # Migration 002b: time_cards.updated_at — base repo touches updated_at on
+    # every UPDATE, so missing this column made clock-out fail silently with
+    # "no such column: updated_at".
+    _add_column(conn, "time_cards", "updated_at", "TEXT")
+
     # For lines: default new column to 1, but for EXISTING rows we want only
     # parts taxable (preserves the previous parts-only tax behavior).
     for table in ("estimate_lines", "ro_lines"):

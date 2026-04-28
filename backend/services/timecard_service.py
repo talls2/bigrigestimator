@@ -62,6 +62,26 @@ class TimeCardService:
         if not data.get("clock_in"):
             raise ValueError("Time card must have a clock_in time")
 
+        # Block double clock-in: refuse if the employee already has an open
+        # session (no clock_out). Names the active job so the worker knows where
+        # to clock out from. Only applies when starting a NEW open session.
+        if not data.get("clock_out"):
+            from config.database import get_db
+            with get_db() as db:
+                existing = db.execute(
+                    """SELECT tc.id, tc.ro_id, tc.activity_type, ro.ro_number
+                       FROM time_cards tc
+                       LEFT JOIN repair_orders ro ON tc.ro_id = ro.id
+                       WHERE tc.employee_id = ? AND tc.clock_out IS NULL
+                       ORDER BY tc.clock_in DESC LIMIT 1""",
+                    (data["employee_id"],),
+                ).fetchone()
+            if existing:
+                ro_label = existing["ro_number"] if existing["ro_number"] else (existing["activity_type"] or "general")
+                raise ValueError(
+                    f"You're already clocked in to {ro_label}. Clock out from there first before starting a new session."
+                )
+
         # Auto-calculate hours if clock_out is provided
         if data.get("clock_out"):
             hours = self.repo.calc_hours(data["clock_in"], data["clock_out"])

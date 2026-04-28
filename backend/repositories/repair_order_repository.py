@@ -31,11 +31,14 @@ class RepairOrderRepository(BaseRepository):
                 OR v.vin LIKE ? OR ro.claim_number LIKE ?)"""
             params.extend([t] * 6)
         if assigned_to:
-            # Match either the legacy fixed columns or the new ro_assignments join.
-            query += """ AND (ro.estimator_id = ? OR ro.technician_id = ? OR ro.painter_id = ?
+            # Match the legacy worker columns OR a non-estimator ro_assignments row.
+            # Estimators don't work on the vehicle so they're excluded from the
+            # worker's "my jobs" view.
+            query += """ AND (ro.technician_id = ? OR ro.painter_id = ?
                 OR EXISTS (SELECT 1 FROM ro_assignments a
-                           WHERE a.ro_id = ro.id AND a.employee_id = ?))"""
-            params.extend([assigned_to] * 4)
+                           WHERE a.ro_id = ro.id AND a.employee_id = ?
+                           AND LOWER(a.role) != 'estimator'))"""
+            params.extend([assigned_to] * 3)
         query += f" ORDER BY ro.{self.order_by} LIMIT ?"
         params.append(limit)
         with get_db() as db:

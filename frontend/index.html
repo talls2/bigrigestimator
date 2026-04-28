@@ -2760,34 +2760,43 @@ function TimeClock({ user }) {
     const [clockedIn, setClockedIn] = useState(false);
     const [clockInTime, setClockInTime] = useState(null);
     const [todayHours, setTodayHours] = useState(0);
-    const [activeRo, setActiveRo] = useState(null);
+    const [activeRoId, setActiveRoId] = useState(null);
+    const [activeRoNumber, setActiveRoNumber] = useState(null);
     const [myJobs, setMyJobs] = useState([]);
+    const [busy, setBusy] = useState(false);
 
     useEffect(() => {
         const t = setInterval(() => setTick(Date.now()), 1000);
         return () => clearInterval(t);
     }, []);
 
-    useEffect(() => {
-        if (user.employee_id) {
-            api('/time-cards?employee_id=' + user.employee_id).then(cards => {
-                const today = new Date().toISOString().slice(0, 10);
-                const todayCards = cards.filter(c => c.clock_in && c.clock_in.startsWith(today));
-                const openCard = todayCards.find(c => !c.clock_out);
-                if (openCard) {
-                    setClockedIn(true);
-                    setClockInTime(new Date(openCard.clock_in));
-                    setActiveRo(openCard.ro_id);
-                }
-                const hours = todayCards.reduce((sum, c) => sum + (c.hours_worked || 0), 0);
-                setTodayHours(hours);
-            }).catch(() => {});
-        }
-    }, [user.employee_id]);
+    // Refresh "are we clocked in" state from server
+    const refreshState = () => {
+        if (!user.employee_id) return Promise.resolve();
+        return api('/time-cards?employee_id=' + user.employee_id).then(cards => {
+            const today = new Date().toISOString().slice(0, 10);
+            const todayCards = cards.filter(c => c.clock_in && c.clock_in.startsWith(today));
+            const openCard = cards.find(c => !c.clock_out);  // open could be from yesterday
+            if (openCard) {
+                setClockedIn(true);
+                setClockInTime(new Date(openCard.clock_in));
+                setActiveRoId(openCard.ro_id);
+                setActiveRoNumber(openCard.ro_number || null);
+            } else {
+                setClockedIn(false);
+                setClockInTime(null);
+                setActiveRoId(null);
+                setActiveRoNumber(null);
+            }
+            const hours = todayCards.reduce((sum, c) => sum + (c.hours_worked || 0), 0);
+            setTodayHours(hours);
+        }).catch(() => {});
+    };
+
+    useEffect(() => { refreshState(); }, [user.employee_id]);
 
     useEffect(() => {
         if (!user.employee_id) return;
-        // Show ROs assigned to this worker, regardless of status (so they can clock onto open or in-progress jobs).
         api(`/repair-orders?assigned_to=${user.employee_id}`).then(ros => {
             const active = ros.filter(r => ['open','in_progress'].includes(r.status));
             setMyJobs(active);
@@ -2795,6 +2804,8 @@ function TimeClock({ user }) {
     }, [user.employee_id]);
 
     const handleClockIn = async (roId = null) => {
+        if (busy) return;
+        setBusy(true);
         try {
             const body = {
                 employee_id: user.employee_id,
@@ -2803,15 +2814,17 @@ function TimeClock({ user }) {
             };
             if (roId) body.ro_id = roId;
             await api('/time-cards', { method: 'POST', body });
-            setClockedIn(true);
-            setClockInTime(new Date());
-            setActiveRo(roId);
+            await refreshState();
         } catch (err) {
-            alert('Clock in failed: ' + err.message);
+            // Backend now sends "You're already clocked in to RO-X. Clock out first." — show as-is.
+            alert(err.message || 'Clock in failed.');
         }
+        setBusy(false);
     };
 
     const handleClockOut = async () => {
+        if (busy) return;
+        setBusy(true);
         try {
             const cards = await api('/time-cards?employee_id=' + user.employee_id);
             const openCard = cards.find(c => !c.clock_out);
@@ -2827,22 +2840,17 @@ function TimeClock({ user }) {
                     }
                 });
             }
-            const addedHrs = clockInTime ? ((new Date() - clockInTime) / 3600000) : 0;
-            setClockedIn(false);
-            setClockInTime(null);
-            setActiveRo(null);
-            setTodayHours(prev => prev + addedHrs);
+            await refreshState();
         } catch (err) {
-            alert('Clock out failed: ' + err.message);
+            alert('Clock out failed: ' + (err.message || err));
         }
+        setBusy(false);
     };
 
     const elapsed = clockedIn && clockInTime ? Math.floor((tick - clockInTime.getTime()) / 1000) : 0;
     const elapsedStr = `${Math.floor(elapsed/3600)}:${String(Math.floor((elapsed%3600)/60)).padStart(2,'0')}:${String(elapsed%60).padStart(2,'0')}`;
 
-    // Worker accounts MUST be linked to an employee record to clock in (time cards
-    // are stored against employee_id, not user_id). Show a clear message instead of
-    // letting the API call fail with a confusing validation error.
+    // Worker accounts MUST be linked to an employee record to clock in.
     if (!user.employee_id) {
         return (
             <div style={{textAlign: 'center', padding: '32px 0'}}>
@@ -2860,57 +2868,85 @@ function TimeClock({ user }) {
         );
     }
 
-    return (
-        <div style={{textAlign: 'center', padding: '16px 0'}}>
+    // ═══ CLOCKED-IN VIEW: big timer + clock-out for the active job ═══
+    if (clockedIn) {
+        const jobLabel = activeRoNumber ? `RO ${activeRoNumber}` : 'general work';
+        return (
+            <div style={{textAlign: 'center', padding: '16px 0'}}>
+                <div style={{fontSize: 16, color: '#22c55e', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8}}>
+                    <i className="fas fa-circle" style={{fontSize: 12, marginRight: 8, animation: 'pulse 2s infinite'}}></i> Clocked In
+                </div>
+                <div style={{fontSize: 18, color: 'var(--text-muted)', marginBottom: 8}}>Working on</div>
+                <div style={{fontSize: 28, fontWeight: 700, color: 'var(--primary)', marginBottom: 16}}>{jobLabel}</div>
+                <div style={{fontSize: 72, fontWeight: 800, fontFamily: 'monospace', color: '#fff', letterSpacing: 4, margin: '8px 0 24px'}}>
+                    {elapsedStr}
+                </div>
+                <button className="touch-btn touch-btn-danger" onClick={handleClockOut} disabled={busy} style={{minWidth: 320, fontSize: 22, padding: '20px 32px'}}>
+                    <i className="fas fa-stop"></i> {busy ? 'Working…' : `Clock Out of ${jobLabel}`}
+                </button>
+                <div style={{marginTop: 32, padding: '16px 24px', background: 'var(--bg-card)', borderRadius: 12, display: 'inline-block', border: '1px solid var(--border)'}}>
+                    <div style={{fontSize: 14, color: 'var(--text-muted)', marginBottom: 4}}>Today's Total</div>
+                    <div style={{fontSize: 32, fontWeight: 700, fontFamily: 'monospace', color: 'var(--primary)'}}>
+                        {(todayHours + elapsed/3600).toFixed(1)}h
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
-            {/* Clocked IN state: big elapsed timer */}
-            {clockedIn ? (
-                <div>
-                    <div style={{fontSize: 16, color: '#22c55e', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8}}>
-                        <i className="fas fa-circle" style={{fontSize: 12, marginRight: 8, animation: 'pulse 2s infinite'}}></i> Clocked In
-                    </div>
-                    <div style={{fontSize: 72, fontWeight: 800, fontFamily: 'monospace', color: '#fff', letterSpacing: 4, margin: '16px 0 24px'}}>
-                        {elapsedStr}
-                    </div>
-                    {activeRo && <div style={{fontSize: 16, color: 'var(--text-muted)', marginBottom: 16}}>
-                        Working on RO #{activeRo}
-                    </div>}
-                    <button className="touch-btn touch-btn-danger" onClick={handleClockOut} style={{minWidth: 280}}>
-                        <i className="fas fa-stop"></i> Clock Out
-                    </button>
+    // ═══ CLOCKED-OUT VIEW: jobs-first picker ═══
+    return (
+        <div style={{padding: '16px 0'}}>
+            <div style={{textAlign: 'center', marginBottom: 24}}>
+                <div style={{fontSize: 16, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2}}>
+                    <i className="far fa-circle" style={{fontSize: 12, marginRight: 8}}></i> Not Clocked In
+                </div>
+                <div style={{fontSize: 14, color: 'var(--text-muted)', marginTop: 8}}>
+                    Pick a job below to start the clock.
+                </div>
+            </div>
+
+            {myJobs.length > 0 ? (
+                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, maxWidth: 900, margin: '0 auto'}}>
+                    {myJobs.map(job => (
+                        <button key={job.id} className="touch-btn touch-btn-success"
+                                onClick={() => handleClockIn(job.id)} disabled={busy}
+                                style={{padding: '20px 16px', textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6}}>
+                            <div style={{fontSize: 14, opacity: 0.85, textTransform: 'uppercase', letterSpacing: 1}}>
+                                <i className="fas fa-play" style={{marginRight: 8}}></i> Clock In
+                            </div>
+                            <div style={{fontSize: 22, fontWeight: 700}}>RO {job.ro_number}</div>
+                            <div style={{fontSize: 13, opacity: 0.85}}>{custName(job)}</div>
+                            <div style={{fontSize: 13, opacity: 0.7}}>{vehDesc(job)}</div>
+                        </button>
+                    ))}
                 </div>
             ) : (
-                /* Clocked OUT state: big clock-in button */
-                <div>
-                    <div style={{fontSize: 16, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 24}}>
-                        <i className="far fa-circle" style={{fontSize: 12, marginRight: 8}}></i> Not Clocked In
+                <div style={{textAlign: 'center', padding: '32px 16px', maxWidth: 500, margin: '0 auto', background: 'var(--bg-card)', borderRadius: 12, border: '1px dashed var(--border)'}}>
+                    <i className="fas fa-clipboard-list" style={{fontSize: 40, color: 'var(--text-muted)', marginBottom: 12}}></i>
+                    <div style={{fontSize: 16, fontWeight: 600, marginBottom: 6}}>No jobs assigned to you yet</div>
+                    <div style={{fontSize: 13, color: 'var(--text-muted)'}}>
+                        Ask the office to add you to an open repair order, or use general clock-in below for non-job work.
                     </div>
-                    <button className="touch-btn touch-btn-success" onClick={() => handleClockIn()} style={{minWidth: 280, marginBottom: 24}}>
-                        <i className="fas fa-play"></i> Clock In
-                    </button>
-
-                    {/* Quick clock-in to a specific job */}
-                    {myJobs.length > 0 && (
-                        <div style={{marginTop: 16}}>
-                            <div style={{fontSize: 14, color: 'var(--text-muted)', marginBottom: 12}}>Or clock in to a specific job:</div>
-                            <div style={{display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center'}}>
-                                {myJobs.map(job => (
-                                    <button key={job.id} className="touch-btn touch-btn-primary" style={{minWidth: 200, fontSize: 16}}
-                                            onClick={() => handleClockIn(job.id)}>
-                                        <i className="fas fa-play"></i> {job.ro_number}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    )}
                 </div>
             )}
 
-            {/* Today's total hours */}
-            <div style={{marginTop: 32, padding: '16px 24px', background: 'var(--bg-card)', borderRadius: 12, display: 'inline-block', border: '1px solid var(--border)'}}>
-                <div style={{fontSize: 14, color: 'var(--text-muted)', marginBottom: 4}}>Today's Total</div>
-                <div style={{fontSize: 32, fontWeight: 700, fontFamily: 'monospace', color: 'var(--primary)'}}>
-                    {(todayHours + (clockedIn ? elapsed/3600 : 0)).toFixed(1)}h
+            <div style={{textAlign: 'center', marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--border)'}}>
+                <div style={{fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1}}>
+                    Cleanup, meetings, no specific job
+                </div>
+                <button className="touch-btn touch-btn-outline" onClick={() => handleClockIn()} disabled={busy}
+                        style={{minWidth: 240, fontSize: 14, padding: '12px 24px'}}>
+                    <i className="fas fa-clock"></i> General Clock In
+                </button>
+            </div>
+
+            <div style={{textAlign: 'center', marginTop: 24}}>
+                <div style={{padding: '12px 24px', background: 'var(--bg-card)', borderRadius: 12, display: 'inline-block', border: '1px solid var(--border)'}}>
+                    <div style={{fontSize: 14, color: 'var(--text-muted)', marginBottom: 4}}>Today's Total</div>
+                    <div style={{fontSize: 28, fontWeight: 700, fontFamily: 'monospace', color: 'var(--primary)'}}>
+                        {todayHours.toFixed(1)}h
+                    </div>
                 </div>
             </div>
         </div>

@@ -332,7 +332,8 @@ TABLES = [
         activity_type TEXT DEFAULT 'production'
             CHECK(activity_type IN ('production','non_production','break','meeting','training','cleanup','other')),
         notes TEXT,
-        created_at TEXT DEFAULT (datetime('now'))
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
     )""",
 
     # ── Flag Pay ──
