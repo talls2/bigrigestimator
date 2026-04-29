@@ -54,6 +54,7 @@ class RepairOrderRepository(BaseRepository):
                     v.year AS vehicle_year, v.make AS vehicle_make,
                     v.model AS vehicle_model, v.vin, v.color AS vehicle_color,
                     v.mileage, v.license_plate,
+                    v.vehicle_type, v.engine_hours, v.length_feet, v.axle_count,
                     ic.company_name AS insurance_name, ic.phone AS insurance_phone,
                     est.first_name AS estimator_first, est.last_name AS estimator_last,
                     tech.first_name AS tech_first, tech.last_name AS tech_last,

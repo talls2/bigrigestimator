@@ -46,6 +46,7 @@ TABLES = [
     """CREATE TABLE IF NOT EXISTS vehicles (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         customer_id INTEGER REFERENCES customers(id),
+        vehicle_type TEXT DEFAULT 'tractor',
         vin TEXT,
         year INTEGER,
         make TEXT,
@@ -55,6 +56,9 @@ TABLES = [
         license_plate TEXT,
         license_state TEXT,
         mileage INTEGER,
+        engine_hours INTEGER,
+        length_feet INTEGER,
+        axle_count INTEGER,
         production_date TEXT,
         notes TEXT,
         created_at TEXT DEFAULT (datetime('now')),

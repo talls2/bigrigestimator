@@ -312,12 +312,29 @@ def generate_invoice_pdf(ro, lines, payments=None, shop=None):
         ro.get("vehicle_model") or ro.get("model"),
     ] if x) or "—"
 
+    # Adapt the primary identifier and usage label to the vehicle type so trailers
+    # show "Serial #" instead of "VIN" and equipment shows "Engine Hours".
+    vt = (ro.get("vehicle_type") or "").lower()
+    is_trailer = vt.startswith("trailer_")
+    is_equipment = vt == "equipment"
+    id_label = "Serial #" if (is_trailer or is_equipment) else "VIN"
+    if is_equipment:
+        usage_label = "Engine Hours"
+        usage_value = f"{ro['engine_hours']:,}" if ro.get("engine_hours") else "Unknown"
+    elif is_trailer:
+        usage_label = None  # trailers don't track mileage
+        usage_value = None
+    else:
+        usage_label = "Mileage"
+        usage_value = f"{ro['mileage']:,}" if ro.get("mileage") else "Unknown"
+
     left_data = [
         ("Customer", cust_name),
         ("Vehicle", veh),
-        ("VIN", ro.get("vin", "—")),
-        ("Mileage", f"{ro['mileage']:,}" if ro.get("mileage") else "Unknown"),
+        (id_label, ro.get("vin", "—")),
     ]
+    if usage_label:
+        left_data.append((usage_label, usage_value))
     right_data = [
         ("Insurance", ro.get("insurance_name", "—")),
         ("Claim #", ro.get("claim_number", "—")),

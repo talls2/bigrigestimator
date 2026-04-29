@@ -16,6 +16,7 @@ service = VehicleService()
 
 class VehicleIn(BaseModel):
     customer_id: int
+    vehicle_type: Optional[str] = None
     vin: Optional[str] = None
     year: Optional[int] = None
     make: Optional[str] = None
@@ -25,6 +26,9 @@ class VehicleIn(BaseModel):
     license_plate: Optional[str] = None
     license_state: Optional[str] = None
     mileage: Optional[int] = None
+    engine_hours: Optional[int] = None
+    length_feet: Optional[int] = None
+    axle_count: Optional[int] = None
     production_date: Optional[str] = None
     notes: Optional[str] = None
 

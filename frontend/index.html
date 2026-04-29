@@ -260,9 +260,132 @@ const fmtDate = (d) => d ? new Date(d + 'T00:00:00').toLocaleDateString() : '—
 const custName = (r) => r.company_name || [r.first_name, r.last_name].filter(Boolean).join(' ') || '—';
 const vehDesc = (r) => [r.vehicle_year||r.year, r.vehicle_make||r.make, r.vehicle_model||r.model].filter(Boolean).join(' ') || '—';
 
+// ── Vehicle types & their per-type field config ──────────────────────────────
+// `id_label`  → what to call the primary identifier (VIN vs Serial #)
+// `usage`     → 'mileage' | 'engine_hours' | 'none'
+// `is_trailer`→ show length + axle count
+const VEHICLE_TYPES = [
+    { value: 'tractor',          label: 'Tractor / Day Cab',         id_label: 'VIN',         usage: 'mileage' },
+    { value: 'sleeper',          label: 'Sleeper Cab Tractor',       id_label: 'VIN',         usage: 'mileage' },
+    { value: 'heavy_truck',      label: 'Heavy Truck (Class 7-8)',   id_label: 'VIN',         usage: 'mileage' },
+    { value: 'medium_truck',     label: 'Medium Truck (box, dump)',  id_label: 'VIN',         usage: 'mileage' },
+    { value: 'pickup_hd',        label: 'Heavy-Duty Pickup',         id_label: 'VIN',         usage: 'mileage' },
+    { value: 'box_truck',        label: 'Box / Cube Truck',          id_label: 'VIN',         usage: 'mileage' },
+    { value: 'tow_truck',        label: 'Tow Truck / Wrecker',       id_label: 'VIN',         usage: 'mileage' },
+    { value: 'bus',              label: 'Bus',                       id_label: 'VIN',         usage: 'mileage' },
+    { value: 'rv',               label: 'RV / Motorhome',            id_label: 'VIN',         usage: 'mileage' },
+    { value: 'trailer_dry_van',  label: 'Dry Van Trailer',           id_label: 'Serial #',    usage: 'none', is_trailer: true },
+    { value: 'trailer_reefer',   label: 'Reefer (Refrigerated)',     id_label: 'Serial #',    usage: 'none', is_trailer: true },
+    { value: 'trailer_flatbed',  label: 'Flatbed Trailer',           id_label: 'Serial #',    usage: 'none', is_trailer: true },
+    { value: 'trailer_lowboy',   label: 'Lowboy / Heavy Haul',       id_label: 'Serial #',    usage: 'none', is_trailer: true },
+    { value: 'trailer_tanker',   label: 'Tanker Trailer',            id_label: 'Serial #',    usage: 'none', is_trailer: true },
+    { value: 'trailer_dump',     label: 'Dump Trailer',              id_label: 'Serial #',    usage: 'none', is_trailer: true },
+    { value: 'trailer_chassis',  label: 'Container Chassis',         id_label: 'Serial #',    usage: 'none', is_trailer: true },
+    { value: 'trailer_other',    label: 'Other Trailer',             id_label: 'Serial #',    usage: 'none', is_trailer: true },
+    { value: 'equipment',        label: 'Heavy Equipment',           id_label: 'Serial #',    usage: 'engine_hours' },
+    { value: 'other',            label: 'Other',                     id_label: 'VIN / Serial #', usage: 'mileage' },
+];
+const vtypeMeta = (t) => VEHICLE_TYPES.find(x => x.value === t) || VEHICLE_TYPES[0];
+const vtypeLabel = (t) => (vtypeMeta(t) || {}).label || t || '—';
+
 function Badge({ status }) {
     const cls = `badge badge-${(status||'').replace(/_/g,'-')}`;
     return <span className={cls}>{(status||'').replace(/_/g,' ')}</span>;
+}
+
+// Shared form fields for vehicle add/edit. The vehicle type drives which fields show up.
+// `form` is the parent's form state object; `set(field, value)` updates one field.
+function VehicleFormFields({ form, set }) {
+    const meta = vtypeMeta(form.vehicle_type || 'tractor');
+    return (
+        <>
+            <div className="form-group" style={{marginBottom: 12}}>
+                <label>Vehicle Type <span style={{color:'var(--danger)'}}>*</span></label>
+                <select value={form.vehicle_type || 'tractor'}
+                        onChange={e => set('vehicle_type', e.target.value)}>
+                    <optgroup label="Trucks & Cabs">
+                        {VEHICLE_TYPES.filter(t => !t.is_trailer && t.usage !== 'engine_hours' && t.value !== 'other').map(t => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="Trailers">
+                        {VEHICLE_TYPES.filter(t => t.is_trailer).map(t => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="Other">
+                        {VEHICLE_TYPES.filter(t => t.usage === 'engine_hours' || t.value === 'other').map(t => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                    </optgroup>
+                </select>
+            </div>
+            <div className="form-grid">
+                <div className="form-group"><label>Year</label><input type="number" value={form.year||''} onChange={e => set('year', e.target.value)} placeholder="2024" /></div>
+                <div className="form-group"><label>Make</label><input value={form.make||''} onChange={e => set('make', e.target.value)} placeholder={meta.is_trailer ? 'Great Dane' : 'Peterbilt'} /></div>
+                <div className="form-group"><label>Model</label><input value={form.model||''} onChange={e => set('model', e.target.value)} placeholder={meta.is_trailer ? '53\' Reefer' : '389'} /></div>
+                <div className="form-group"><label>Submodel / Trim</label><input value={form.submodel||''} onChange={e => set('submodel', e.target.value)} /></div>
+                <div className="form-group">
+                    <label>{meta.id_label}</label>
+                    <input value={form.vin||''} onChange={e => set('vin', e.target.value)}
+                           placeholder={meta.id_label === 'Serial #' ? 'Serial number from data plate' : '17-digit VIN'} />
+                </div>
+                <div className="form-group"><label>Color</label><input value={form.color||''} onChange={e => set('color', e.target.value)} /></div>
+                <div className="form-group"><label>License Plate</label><input value={form.license_plate||''} onChange={e => set('license_plate', e.target.value)} /></div>
+                <div className="form-group"><label>License State</label><input value={form.license_state||''} onChange={e => set('license_state', e.target.value)} maxLength="2" placeholder="MA" /></div>
+                {meta.usage === 'mileage' && (
+                    <div className="form-group">
+                        <label>Mileage</label>
+                        <div style={{display:'flex', gap:8, alignItems:'center'}}>
+                            <input type="number" value={form.mileage_unknown ? '' : (form.mileage||'')}
+                                   disabled={!!form.mileage_unknown}
+                                   placeholder={form.mileage_unknown ? 'Unknown' : ''}
+                                   onChange={e => set('mileage', e.target.value)}
+                                   style={{flex:1}} />
+                            <label style={{display:'flex', alignItems:'center', gap:4, fontSize:13, whiteSpace:'nowrap', margin:0, cursor:'pointer'}}>
+                                <input type="checkbox" checked={!!form.mileage_unknown}
+                                       onChange={e => { set('mileage_unknown', e.target.checked); if (e.target.checked) set('mileage', ''); }} />
+                                Unknown
+                            </label>
+                        </div>
+                    </div>
+                )}
+                {meta.usage === 'engine_hours' && (
+                    <div className="form-group">
+                        <label>Engine Hours</label>
+                        <input type="number" value={form.engine_hours||''} onChange={e => set('engine_hours', e.target.value)} placeholder="Hour meter reading" />
+                    </div>
+                )}
+                {meta.is_trailer && (
+                    <>
+                        <div className="form-group">
+                            <label>Length (feet)</label>
+                            <input type="number" value={form.length_feet||''} onChange={e => set('length_feet', e.target.value)} placeholder="53" />
+                        </div>
+                        <div className="form-group">
+                            <label>Number of Axles</label>
+                            <input type="number" value={form.axle_count||''} onChange={e => set('axle_count', e.target.value)} placeholder="2" />
+                        </div>
+                    </>
+                )}
+            </div>
+        </>
+    );
+}
+
+// Build a clean POST/PUT body from the form state, dropping UI-only fields
+// and converting numerics. Returns a plain object ready for the API.
+function buildVehicleBody(form) {
+    const body = {...form};
+    // UI-only state — strip
+    delete body.mileage_unknown;
+    // Numerics
+    if (body.year) body.year = parseInt(body.year);
+    body.mileage      = (form.mileage_unknown || !body.mileage)      ? null : parseInt(body.mileage);
+    body.engine_hours = body.engine_hours ? parseInt(body.engine_hours) : null;
+    body.length_feet  = body.length_feet  ? parseInt(body.length_feet)  : null;
+    body.axle_count   = body.axle_count   ? parseInt(body.axle_count)   : null;
+    return body;
 }
 
 function Modal({ open, onClose, title, children }) {
@@ -477,17 +600,14 @@ function CustomersPage({ navigate }) {
 function CustomerDetail({ id, navigate }) {
     const [c, setC] = useState(null);
     const [showVehForm, setShowVehForm] = useState(false);
-    const emptyVeh = {vin:'',year:'',make:'',model:'',submodel:'',color:'',license_plate:'',license_state:'',mileage:'',notes:''};
+    const emptyVeh = {vehicle_type:'tractor',vin:'',year:'',make:'',model:'',submodel:'',color:'',license_plate:'',license_state:'',mileage:'',engine_hours:'',length_feet:'',axle_count:'',notes:''};
     const [vehForm, setVehForm] = useState(emptyVeh);
 
     const load = () => api(`/customers/${id}`).then(setC);
     useEffect(() => { load(); }, [id]);
 
     const saveVehicle = async () => {
-        const body = {...vehForm, customer_id: parseInt(id)};
-        if (body.year) body.year = parseInt(body.year);
-        body.mileage = (body.mileage_unknown || !body.mileage) ? null : parseInt(body.mileage);
-        delete body.mileage_unknown;
+        const body = {...buildVehicleBody(vehForm), customer_id: parseInt(id)};
         await api('/vehicles', { method: 'POST', body });
         setShowVehForm(false); setVehForm(emptyVeh); load();
     };
@@ -537,31 +657,7 @@ function CustomerDetail({ id, navigate }) {
                 </tbody></table>
             </div>
             <Modal open={showVehForm} onClose={() => setShowVehForm(false)} title={`Add Vehicle for ${custName(c)}`}>
-                <div className="form-grid">
-                    <div className="form-group"><label>Year</label><input type="number" value={vehForm.year} onChange={e => setVehForm({...vehForm, year: e.target.value})} placeholder="2024" /></div>
-                    <div className="form-group"><label>Make</label><input value={vehForm.make} onChange={e => setVehForm({...vehForm, make: e.target.value})} placeholder="Peterbilt" /></div>
-                    <div className="form-group"><label>Model</label><input value={vehForm.model} onChange={e => setVehForm({...vehForm, model: e.target.value})} placeholder="389" /></div>
-                    <div className="form-group"><label>Submodel / Trim</label><input value={vehForm.submodel} onChange={e => setVehForm({...vehForm, submodel: e.target.value})} /></div>
-                    <div className="form-group"><label>VIN</label><input value={vehForm.vin} onChange={e => setVehForm({...vehForm, vin: e.target.value})} placeholder="17-digit VIN" /></div>
-                    <div className="form-group"><label>Color</label><input value={vehForm.color} onChange={e => setVehForm({...vehForm, color: e.target.value})} /></div>
-                    <div className="form-group"><label>License Plate</label><input value={vehForm.license_plate} onChange={e => setVehForm({...vehForm, license_plate: e.target.value})} /></div>
-                    <div className="form-group"><label>License State</label><input value={vehForm.license_state} onChange={e => setVehForm({...vehForm, license_state: e.target.value})} maxLength="2" placeholder="CA" /></div>
-                    <div className="form-group">
-                        <label>Mileage</label>
-                        <div style={{display:'flex', gap:8, alignItems:'center'}}>
-                            <input type="number" value={vehForm.mileage_unknown ? '' : vehForm.mileage}
-                                   disabled={!!vehForm.mileage_unknown}
-                                   placeholder={vehForm.mileage_unknown ? 'Unknown' : ''}
-                                   onChange={e => setVehForm({...vehForm, mileage: e.target.value})}
-                                   style={{flex:1}} />
-                            <label style={{display:'flex', alignItems:'center', gap:4, fontSize:13, whiteSpace:'nowrap', margin:0, cursor:'pointer'}}>
-                                <input type="checkbox" checked={!!vehForm.mileage_unknown}
-                                       onChange={e => setVehForm({...vehForm, mileage_unknown: e.target.checked, mileage: e.target.checked ? '' : vehForm.mileage})} />
-                                Unknown
-                            </label>
-                        </div>
-                    </div>
-                </div>
+                <VehicleFormFields form={vehForm} set={(field, val) => setVehForm({...vehForm, [field]: val})} />
                 <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={vehForm.notes} onChange={e => setVehForm({...vehForm, notes: e.target.value})} /></div>
                 <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowVehForm(false)}>Cancel</button><button className="btn btn-primary" onClick={saveVehicle}><i className="fas fa-save"></i> Save Vehicle</button></div>
             </Modal>
@@ -577,7 +673,7 @@ function VehiclesPage({ navigate }) {
     const [search, setSearch] = useState('');
     const [showForm, setShowForm] = useState(false);
     const [customers, setCustomers] = useState([]);
-    const emptyVeh = {customer_id:'',vin:'',year:'',make:'',model:'',submodel:'',color:'',license_plate:'',license_state:'',mileage:'',notes:''};
+    const emptyVeh = {customer_id:'',vehicle_type:'tractor',vin:'',year:'',make:'',model:'',submodel:'',color:'',license_plate:'',license_state:'',mileage:'',engine_hours:'',length_feet:'',axle_count:'',notes:''};
     const [form, setForm] = useState(emptyVeh);
 
     const load = () => api('/vehicles' + (search ? `?search=${search}` : '')).then(setVehicles);
@@ -585,10 +681,7 @@ function VehiclesPage({ navigate }) {
     useEffect(() => { if (showForm) api('/customers').then(setCustomers); }, [showForm]);
 
     const save = async () => {
-        const body = {...form};
-        if (body.year) body.year = parseInt(body.year);
-        body.mileage = (body.mileage_unknown || !body.mileage) ? null : parseInt(body.mileage);
-        delete body.mileage_unknown;
+        const body = buildVehicleBody(form);
         await api('/vehicles', { method: 'POST', body });
         setShowForm(false); setForm(emptyVeh); load();
     };
@@ -601,52 +694,37 @@ function VehiclesPage({ navigate }) {
             </div>
             <div className="search-bar"><input placeholder="Search by VIN, make, model..." value={search} onChange={e => setSearch(e.target.value)} /></div>
             <div className="card"><div className="table-wrapper">
-                <table><thead><tr><th>Vehicle</th><th>VIN</th><th>Color</th><th>Owner</th><th>Mileage</th></tr></thead>
+                <table><thead><tr><th>Type</th><th>Vehicle</th><th>VIN / Serial #</th><th>Color</th><th>Owner</th><th>Mi / Hrs</th></tr></thead>
                 <tbody>
-                {vehicles.map(v => (
-                    <tr key={v.id} className="clickable" onClick={() => navigate('vehicle-detail', v.id)}>
-                        <td style={{fontWeight:500}}>{vehDesc(v)}</td>
-                        <td className="text-sm">{v.vin||'—'}</td>
-                        <td>{v.color||'—'}</td>
-                        <td>{custName(v)}</td>
-                        <td>{v.mileage ? v.mileage.toLocaleString() : <span className="text-muted">Unknown</span>}</td>
-                    </tr>
-                ))}
-                {!vehicles.length && <tr><td colSpan="5" className="text-muted" style={{textAlign:'center',padding:32}}>No vehicles found</td></tr>}
+                {vehicles.map(v => {
+                    const meta = vtypeMeta(v.vehicle_type);
+                    const usage = meta.usage === 'engine_hours'
+                        ? (v.engine_hours != null ? `${v.engine_hours.toLocaleString()} hrs` : '—')
+                        : meta.usage === 'mileage'
+                            ? (v.mileage ? v.mileage.toLocaleString() : <span className="text-muted">Unknown</span>)
+                            : '—';
+                    return (
+                        <tr key={v.id} className="clickable" onClick={() => navigate('vehicle-detail', v.id)}>
+                            <td className="text-sm">{vtypeLabel(v.vehicle_type)}</td>
+                            <td style={{fontWeight:500}}>{vehDesc(v)}</td>
+                            <td className="text-sm">{v.vin||'—'}</td>
+                            <td>{v.color||'—'}</td>
+                            <td>{custName(v)}</td>
+                            <td>{usage}</td>
+                        </tr>
+                    );
+                })}
+                {!vehicles.length && <tr><td colSpan="6" className="text-muted" style={{textAlign:'center',padding:32}}>No vehicles found</td></tr>}
                 </tbody></table>
             </div></div>
             <Modal open={showForm} onClose={() => setShowForm(false)} title="New Vehicle">
-                <div className="form-grid">
-                    <div className="form-group"><label>Owner *</label>
-                        <select value={form.customer_id} onChange={e => setForm({...form, customer_id: e.target.value})}>
-                            <option value="">Select customer...</option>
-                            {customers.map(c => <option key={c.id} value={c.id}>{custName(c)}</option>)}
-                        </select>
-                    </div>
-                    <div className="form-group"><label>Year</label><input type="number" value={form.year} onChange={e => setForm({...form, year: e.target.value})} placeholder="2024" /></div>
-                    <div className="form-group"><label>Make</label><input value={form.make} onChange={e => setForm({...form, make: e.target.value})} placeholder="Peterbilt" /></div>
-                    <div className="form-group"><label>Model</label><input value={form.model} onChange={e => setForm({...form, model: e.target.value})} placeholder="389" /></div>
-                    <div className="form-group"><label>Submodel / Trim</label><input value={form.submodel} onChange={e => setForm({...form, submodel: e.target.value})} /></div>
-                    <div className="form-group"><label>VIN</label><input value={form.vin} onChange={e => setForm({...form, vin: e.target.value})} placeholder="17-digit VIN" /></div>
-                    <div className="form-group"><label>Color</label><input value={form.color} onChange={e => setForm({...form, color: e.target.value})} /></div>
-                    <div className="form-group"><label>License Plate</label><input value={form.license_plate} onChange={e => setForm({...form, license_plate: e.target.value})} /></div>
-                    <div className="form-group"><label>License State</label><input value={form.license_state} onChange={e => setForm({...form, license_state: e.target.value})} maxLength="2" placeholder="CA" /></div>
-                    <div className="form-group">
-                        <label>Mileage</label>
-                        <div style={{display:'flex', gap:8, alignItems:'center'}}>
-                            <input type="number" value={form.mileage_unknown ? '' : form.mileage}
-                                   disabled={!!form.mileage_unknown}
-                                   placeholder={form.mileage_unknown ? 'Unknown' : ''}
-                                   onChange={e => setForm({...form, mileage: e.target.value})}
-                                   style={{flex:1}} />
-                            <label style={{display:'flex', alignItems:'center', gap:4, fontSize:13, whiteSpace:'nowrap', margin:0, cursor:'pointer'}}>
-                                <input type="checkbox" checked={!!form.mileage_unknown}
-                                       onChange={e => setForm({...form, mileage_unknown: e.target.checked, mileage: e.target.checked ? '' : form.mileage})} />
-                                Unknown
-                            </label>
-                        </div>
-                    </div>
+                <div className="form-group" style={{marginBottom:12}}><label>Owner *</label>
+                    <select value={form.customer_id} onChange={e => setForm({...form, customer_id: e.target.value})}>
+                        <option value="">Select customer...</option>
+                        {customers.map(c => <option key={c.id} value={c.id}>{custName(c)}</option>)}
+                    </select>
                 </div>
+                <VehicleFormFields form={form} set={(field, val) => setForm({...form, [field]: val})} />
                 <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} /></div>
                 <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowForm(false)}>Cancel</button><button className="btn btn-primary" onClick={save} disabled={!form.customer_id}><i className="fas fa-save"></i> Save</button></div>
             </Modal>
@@ -675,13 +753,9 @@ function VehicleDetail({ id, navigate }) {
     const save = async () => {
         if (!form.customer_id) { alert('Please select an owner'); return; }
         const body = {
+            ...buildVehicleBody(form),
             customer_id: parseInt(form.customer_id),
-            vin: form.vin || null, year: form.year ? parseInt(form.year) : null,
-            make: form.make || null, model: form.model || null, submodel: form.submodel || null,
-            color: form.color || null, license_plate: form.license_plate || null,
-            license_state: form.license_state || null,
-            mileage: (form.mileage_unknown || !form.mileage) ? null : parseInt(form.mileage),
-            notes: form.notes || null
+            notes: form.notes || null,
         };
         await api(`/vehicles/${id}`, { method: 'PUT', body });
         setEditing(false); load();
@@ -709,14 +783,24 @@ function VehicleDetail({ id, navigate }) {
             <div className="detail-grid">
                 <div className="card">
                     <div className="section-title"><i className="fas fa-car"></i> Vehicle Info</div>
+                    <div className="detail-row"><span className="detail-label">Type</span><span className="detail-value">{vtypeLabel(v.vehicle_type)}</span></div>
                     <div className="detail-row"><span className="detail-label">Year</span><span className="detail-value">{v.year||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Make</span><span className="detail-value">{v.make||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Model</span><span className="detail-value">{v.model||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Submodel</span><span className="detail-value">{v.submodel||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Color</span><span className="detail-value">{v.color||'—'}</span></div>
-                    <div className="detail-row"><span className="detail-label">VIN</span><span className="detail-value">{v.vin||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">{vtypeMeta(v.vehicle_type).id_label}</span><span className="detail-value">{v.vin||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Plate</span><span className="detail-value">{v.license_plate ? `${v.license_plate} (${v.license_state||'—'})` : '—'}</span></div>
-                    <div className="detail-row"><span className="detail-label">Mileage</span><span className="detail-value">{v.mileage ? v.mileage.toLocaleString() : <span className="text-muted">Unknown</span>}</span></div>
+                    {vtypeMeta(v.vehicle_type).usage === 'mileage' && (
+                        <div className="detail-row"><span className="detail-label">Mileage</span><span className="detail-value">{v.mileage ? v.mileage.toLocaleString() : <span className="text-muted">Unknown</span>}</span></div>
+                    )}
+                    {vtypeMeta(v.vehicle_type).usage === 'engine_hours' && (
+                        <div className="detail-row"><span className="detail-label">Engine Hours</span><span className="detail-value">{v.engine_hours != null ? v.engine_hours.toLocaleString() : <span className="text-muted">Unknown</span>}</span></div>
+                    )}
+                    {vtypeMeta(v.vehicle_type).is_trailer && <>
+                        <div className="detail-row"><span className="detail-label">Length</span><span className="detail-value">{v.length_feet ? `${v.length_feet}'` : '—'}</span></div>
+                        <div className="detail-row"><span className="detail-label">Axles</span><span className="detail-value">{v.axle_count||'—'}</span></div>
+                    </>}
                 </div>
                 <div className="card">
                     <div className="section-title"><i className="fas fa-user"></i> Owner</div>
@@ -744,31 +828,7 @@ function VehicleDetail({ id, navigate }) {
                     </select>
                     <div className="text-muted text-sm" style={{marginTop:4}}>Change this to reassign the vehicle to a different customer.</div>
                 </div>
-                <div className="form-grid">
-                    <div className="form-group"><label>Year</label><input type="number" value={form.year||''} onChange={e => setForm({...form, year: e.target.value})} /></div>
-                    <div className="form-group"><label>Make</label><input value={form.make||''} onChange={e => setForm({...form, make: e.target.value})} /></div>
-                    <div className="form-group"><label>Model</label><input value={form.model||''} onChange={e => setForm({...form, model: e.target.value})} /></div>
-                    <div className="form-group"><label>Submodel</label><input value={form.submodel||''} onChange={e => setForm({...form, submodel: e.target.value})} /></div>
-                    <div className="form-group"><label>VIN</label><input value={form.vin||''} onChange={e => setForm({...form, vin: e.target.value})} /></div>
-                    <div className="form-group"><label>Color</label><input value={form.color||''} onChange={e => setForm({...form, color: e.target.value})} /></div>
-                    <div className="form-group"><label>License Plate</label><input value={form.license_plate||''} onChange={e => setForm({...form, license_plate: e.target.value})} /></div>
-                    <div className="form-group"><label>License State</label><input value={form.license_state||''} onChange={e => setForm({...form, license_state: e.target.value})} maxLength="2" /></div>
-                    <div className="form-group">
-                        <label>Mileage</label>
-                        <div style={{display:'flex', gap:8, alignItems:'center'}}>
-                            <input type="number" value={form.mileage_unknown ? '' : (form.mileage||'')}
-                                   disabled={!!form.mileage_unknown}
-                                   placeholder={form.mileage_unknown ? 'Unknown' : ''}
-                                   onChange={e => setForm({...form, mileage: e.target.value})}
-                                   style={{flex:1}} />
-                            <label style={{display:'flex', alignItems:'center', gap:4, fontSize:13, whiteSpace:'nowrap', margin:0, cursor:'pointer'}}>
-                                <input type="checkbox" checked={!!form.mileage_unknown}
-                                       onChange={e => setForm({...form, mileage_unknown: e.target.checked, mileage: e.target.checked ? '' : form.mileage})} />
-                                Unknown
-                            </label>
-                        </div>
-                    </div>
-                </div>
+                <VehicleFormFields form={form} set={(field, val) => setForm({...form, [field]: val})} />
                 <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={form.notes||''} onChange={e => setForm({...form, notes: e.target.value})} /></div>
                 <div className="modal-actions"><button className="btn btn-outline" onClick={() => setEditing(false)}>Cancel</button><button className="btn btn-primary" onClick={save}><i className="fas fa-save"></i> Save</button></div>
             </Modal>

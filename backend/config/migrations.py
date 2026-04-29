@@ -211,6 +211,18 @@ def run_migrations(conn) -> None:
     # "no such column: updated_at".
     _add_column(conn, "time_cards", "updated_at", "TEXT")
 
+    # Migration 002c: vehicle type + type-specific fields. Existing rows default
+    # to 'tractor' (most common at this shop) so the UI keeps showing VIN and
+    # mileage by default; admin can change the type per vehicle.
+    _add_column(conn, "vehicles", "vehicle_type",  "TEXT DEFAULT 'tractor'")
+    _add_column(conn, "vehicles", "engine_hours",  "INTEGER")
+    _add_column(conn, "vehicles", "length_feet",   "INTEGER")
+    _add_column(conn, "vehicles", "axle_count",    "INTEGER")
+    # Backfill any nulls from earlier ALTER (SQLite ALTER ADD COLUMN with
+    # DEFAULT only applies to new rows in some Python versions).
+    conn.execute("UPDATE vehicles SET vehicle_type = 'tractor' WHERE vehicle_type IS NULL")
+    conn.commit()
+
     # For lines: default new column to 1, but for EXISTING rows we want only
     # parts taxable (preserves the previous parts-only tax behavior).
     for table in ("estimate_lines", "ro_lines"):
