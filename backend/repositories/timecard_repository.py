@@ -45,17 +45,32 @@ class TimeCardRepository(BaseRepository):
     def calc_hours(self, clock_in: str, clock_out: str) -> float:
         """
         Calculate hours worked between two datetime strings.
-        Expects ISO format: "2026-04-15T09:00:00" or "2026-04-15 09:00:00".
-        Returns float hours (can be fractional).
+        Tolerates several formats stored over the project's history:
+          - "2026-04-15T13:00:00.000Z"  (current — proper ISO UTC)
+          - "2026-04-15T13:00:00+00:00" (proper ISO with explicit offset)
+          - "2026-04-15 13:00:00"       (legacy — UTC time written without TZ marker)
+        Both inputs are treated on the same UTC scale; the result is never negative.
         """
-        try:
-            # Try ISO format with T separator first
-            in_time = datetime.fromisoformat(clock_in.replace(' ', 'T'))
-            out_time = datetime.fromisoformat(clock_out.replace(' ', 'T'))
-        except (ValueError, AttributeError):
-            # Fallback
+        def parse(s):
+            if not s:
+                return None
+            s = s.replace(' ', 'T').rstrip('Zz')
+            # Strip trailing +HH:MM / -HH:MM offset (Python<3.11 fromisoformat is picky)
+            if len(s) >= 6 and s[-3] == ':' and s[-6] in '+-':
+                s = s[:-6]
+            # Drop microseconds tail
+            if '.' in s:
+                s = s.split('.', 1)[0]
+            try:
+                return datetime.fromisoformat(s)
+            except (ValueError, AttributeError):
+                return None
+
+        in_time = parse(clock_in)
+        out_time = parse(clock_out)
+        if not in_time or not out_time:
             return 0.0
 
         delta = out_time - in_time
         hours = delta.total_seconds() / 3600.0
-        return round(hours, 2)
+        return max(0.0, round(hours, 2))

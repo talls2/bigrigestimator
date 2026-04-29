@@ -2773,16 +2773,36 @@ function TimeClock({ user }) {
         return () => clearInterval(t);
     }, []);
 
+    // Parse a clock_in/out string from the API, tolerant of two formats:
+    //   1. New format: "2026-04-29T13:00:00.000Z" (proper ISO, parses as UTC)
+    //   2. Legacy:     "2026-04-29 13:00:00" (UTC time written without a TZ marker)
+    // For #2, `new Date(s)` would interpret it as LOCAL time and produce a wrong
+    // value, so we append 'Z' to force UTC parsing — that's why historical clock-in
+    // timers showed negative elapsed.
+    const parseStamp = (s) => {
+        if (!s) return null;
+        if (/[Zz]$|[+\-]\d{2}:?\d{2}$/.test(s)) return new Date(s);
+        return new Date(s.replace(' ', 'T') + 'Z');
+    };
+
     // Refresh "are we clocked in" state from server
     const refreshState = () => {
         if (!user.employee_id) return Promise.resolve();
         return api('/time-cards?employee_id=' + user.employee_id).then(cards => {
-            const today = new Date().toISOString().slice(0, 10);
-            const todayCards = cards.filter(c => c.clock_in && c.clock_in.startsWith(today));
+            const todayLocal = new Date();
+            const todayKey = todayLocal.getFullYear() + '-' +
+                String(todayLocal.getMonth()+1).padStart(2,'0') + '-' +
+                String(todayLocal.getDate()).padStart(2,'0');
+            const todayCards = cards.filter(c => {
+                const d = parseStamp(c.clock_in);
+                if (!d) return false;
+                const k = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+                return k === todayKey;
+            });
             const openCard = cards.find(c => !c.clock_out);  // open could be from yesterday
             if (openCard) {
                 setClockedIn(true);
-                setClockInTime(new Date(openCard.clock_in));
+                setClockInTime(parseStamp(openCard.clock_in));
                 setActiveRoId(openCard.ro_id);
                 setActiveRoNumber(openCard.ro_number || null);
             } else {
@@ -2812,14 +2832,13 @@ function TimeClock({ user }) {
         try {
             const body = {
                 employee_id: user.employee_id,
-                clock_in: new Date().toISOString().replace('T', ' ').slice(0, 19),
+                clock_in: new Date().toISOString(),  // proper ISO with 'Z' so backend + reader agree
                 activity_type: 'production',
             };
             if (roId) body.ro_id = roId;
             await api('/time-cards', { method: 'POST', body });
             await refreshState();
         } catch (err) {
-            // Backend now sends "You're already clocked in to RO-X. Clock out first." — show as-is.
             alert(err.message || 'Clock in failed.');
         }
         setBusy(false);
@@ -2833,13 +2852,13 @@ function TimeClock({ user }) {
             const openCard = cards.find(c => !c.clock_out);
             if (openCard) {
                 const now = new Date();
-                const cIn = new Date(openCard.clock_in);
-                const hours = ((now - cIn) / 3600000).toFixed(2);
+                const cIn = parseStamp(openCard.clock_in);
+                const hours = cIn ? Math.max(0, (now - cIn) / 3600000) : 0;
                 await api(`/time-cards/${openCard.id}`, {
                     method: 'PUT',
                     body: {
-                        clock_out: now.toISOString().replace('T', ' ').slice(0, 19),
-                        hours_worked: parseFloat(hours),
+                        clock_out: now.toISOString(),
+                        hours_worked: parseFloat(hours.toFixed(2)),
                     }
                 });
             }
@@ -2850,7 +2869,8 @@ function TimeClock({ user }) {
         setBusy(false);
     };
 
-    const elapsed = clockedIn && clockInTime ? Math.floor((tick - clockInTime.getTime()) / 1000) : 0;
+    const elapsedRaw = clockedIn && clockInTime ? Math.floor((tick - clockInTime.getTime()) / 1000) : 0;
+    const elapsed = Math.max(0, elapsedRaw);  // defensive clamp against any stray bad timestamp
     const elapsedStr = `${Math.floor(elapsed/3600)}:${String(Math.floor((elapsed%3600)/60)).padStart(2,'0')}:${String(elapsed%60).padStart(2,'0')}`;
 
     // Worker accounts MUST be linked to an employee record to clock in.
