@@ -2917,7 +2917,7 @@ function LoginScreen({ onLogin, onBack }) {
 // WORKER TIME CLOCK (touch optimized — NO actual time display)
 // Shows only elapsed timer after clock-in + today's total
 // ═══════════════════════════════════════════════════════════
-function TimeClock({ user }) {
+function TimeClock({ user, onLogout }) {
     const [tick, setTick] = useState(Date.now());
     const [clockedIn, setClockedIn] = useState(false);
     const [clockInTime, setClockInTime] = useState(null);
@@ -2926,6 +2926,8 @@ function TimeClock({ user }) {
     const [activeRoNumber, setActiveRoNumber] = useState(null);
     const [myJobs, setMyJobs] = useState([]);
     const [busy, setBusy] = useState(false);
+    const [confirmation, setConfirmation] = useState(null);  // {type:'in'|'out', label, hours?}
+    const [logoutCountdown, setLogoutCountdown] = useState(null);
 
     useEffect(() => {
         const t = setInterval(() => setTick(Date.now()), 1000);
@@ -2973,22 +2975,38 @@ function TimeClock({ user }) {
         }).catch(() => {});
     }, [user.employee_id]);
 
-    const handleClockIn = async (roId = null) => {
+    // Show a brief success screen, then auto-logout so the next worker can use the
+    // terminal. Mimics the Mitchell TecStation kiosk flow.
+    const triggerKioskLogout = (msg) => {
+        setConfirmation(msg);
+        let secs = 3;
+        setLogoutCountdown(secs);
+        const interval = setInterval(() => {
+            secs -= 1;
+            setLogoutCountdown(secs);
+            if (secs <= 0) {
+                clearInterval(interval);
+                if (onLogout) onLogout();
+            }
+        }, 1000);
+    };
+
+    const handleClockIn = async (roId = null, jobLabel = null) => {
         if (busy) return;
         setBusy(true);
         try {
             const body = {
                 employee_id: user.employee_id,
-                clock_in: new Date().toISOString(),  // proper ISO with 'Z' so backend + reader agree
+                clock_in: new Date().toISOString(),
                 activity_type: 'production',
             };
             if (roId) body.ro_id = roId;
             await api('/time-cards', { method: 'POST', body });
-            await refreshState();
+            triggerKioskLogout({ type: 'in', label: jobLabel || (roId ? `RO ${roId}` : 'general work') });
         } catch (err) {
             alert(err.message || 'Clock in failed.');
+            setBusy(false);
         }
-        setBusy(false);
     };
 
     const handleClockOut = async () => {
@@ -2997,28 +3015,67 @@ function TimeClock({ user }) {
         try {
             const cards = await api('/time-cards?employee_id=' + user.employee_id);
             const openCard = cards.find(c => !c.clock_out);
+            let hoursWorked = 0;
+            let label = activeRoNumber ? `RO ${activeRoNumber}` : 'general work';
             if (openCard) {
                 const now = new Date();
                 const cIn = parseStamp(openCard.clock_in);
-                const hours = cIn ? Math.max(0, (now - cIn) / 3600000) : 0;
+                hoursWorked = cIn ? Math.max(0, (now - cIn) / 3600000) : 0;
+                if (openCard.ro_number) label = `RO ${openCard.ro_number}`;
                 await api(`/time-cards/${openCard.id}`, {
                     method: 'PUT',
                     body: {
                         clock_out: now.toISOString(),
-                        hours_worked: parseFloat(hours.toFixed(2)),
+                        hours_worked: parseFloat(hoursWorked.toFixed(2)),
                     }
                 });
             }
-            await refreshState();
+            triggerKioskLogout({ type: 'out', label, hours: hoursWorked });
         } catch (err) {
             alert('Clock out failed: ' + (err.message || err));
+            setBusy(false);
         }
-        setBusy(false);
     };
 
     const elapsedRaw = clockedIn && clockInTime ? Math.floor((tick - clockInTime.getTime()) / 1000) : 0;
     const elapsed = Math.max(0, elapsedRaw);  // defensive clamp against any stray bad timestamp
     const elapsedStr = `${Math.floor(elapsed/3600)}:${String(Math.floor((elapsed%3600)/60)).padStart(2,'0')}:${String(elapsed%60).padStart(2,'0')}`;
+
+    // ═══ KIOSK CONFIRMATION + AUTO-LOGOUT SCREEN ═══
+    // After a clock-in/out succeeds, we briefly show a big confirmation, then
+    // the parent's onLogout fires and returns to the worker login grid.
+    if (confirmation) {
+        const isIn = confirmation.type === 'in';
+        const fmtH = (h) => `${h.toFixed(2)} hrs`;
+        return (
+            <div style={{textAlign:'center', padding:'48px 16px', minHeight:480, display:'flex', flexDirection:'column', justifyContent:'center', alignItems:'center'}}>
+                <div style={{fontSize:96, color: isIn ? '#22c55e' : 'var(--primary)', marginBottom:24}}>
+                    <i className={isIn ? 'fas fa-check-circle' : 'fas fa-stop-circle'}></i>
+                </div>
+                <div style={{fontSize:36, fontWeight:800, marginBottom:8}}>
+                    {isIn ? 'Clocked In' : 'Clocked Out'}
+                </div>
+                <div style={{fontSize:20, color:'var(--text-muted)', marginBottom:8}}>
+                    {user.display_name || user.username}
+                </div>
+                <div style={{fontSize:24, fontWeight:600, color: isIn ? '#22c55e' : 'var(--primary)', marginBottom:24}}>
+                    {isIn ? 'on ' : 'of '}{confirmation.label}
+                </div>
+                {!isIn && confirmation.hours != null && (
+                    <div style={{fontSize:18, color:'var(--text)', marginBottom:24}}>
+                        Session: <b>{fmtH(confirmation.hours)}</b>
+                    </div>
+                )}
+                <div style={{fontSize:14, color:'var(--text-muted)', marginTop:16}}>
+                    Logging out in <b style={{color:'var(--text)', fontSize:16}}>{logoutCountdown}</b>…
+                </div>
+                <button className="touch-btn touch-btn-outline" onClick={() => onLogout && onLogout()}
+                        style={{minWidth:200, marginTop:24, fontSize:14, padding:'10px 20px'}}>
+                    Done — Log Out Now
+                </button>
+            </div>
+        );
+    }
 
     // Worker accounts MUST be linked to an employee record to clock in.
     if (!user.employee_id) {
@@ -3080,7 +3137,7 @@ function TimeClock({ user }) {
                 <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, maxWidth: 900, margin: '0 auto'}}>
                     {myJobs.map(job => (
                         <button key={job.id} className="touch-btn touch-btn-success"
-                                onClick={() => handleClockIn(job.id)} disabled={busy}
+                                onClick={() => handleClockIn(job.id, `RO ${job.ro_number}`)} disabled={busy}
                                 style={{padding: '20px 16px', textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6}}>
                             <div style={{fontSize: 14, opacity: 0.85, textTransform: 'uppercase', letterSpacing: 1}}>
                                 <i className="fas fa-play" style={{marginRight: 8}}></i> Clock In
@@ -3153,7 +3210,7 @@ function WorkerView({ user, onLogout }) {
                 </div>
             </div>
             <div className="worker-main" style={{maxWidth: '900px'}}>
-                {workerTab === 'clock' && <TimeClock user={user} />}
+                {workerTab === 'clock' && <TimeClock user={user} onLogout={onLogout} />}
                 {workerTab === 'my-jobs' && <MyJobsView user={user} />}
             </div>
         </div>
