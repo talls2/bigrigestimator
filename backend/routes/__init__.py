@@ -17,6 +17,7 @@ from .production_routes import router as production_router
 from .auth_routes import router as auth_router
 from .export_routes import router as export_router
 from .tecstation_routes import router as tecstation_router
+from .parts_catalog_routes import router as parts_catalog_router
 
 __all__ = [
     "dashboard_router",
@@ -34,4 +35,5 @@ __all__ = [
     "auth_router",
     "export_router",
     "tecstation_router",
+    "parts_catalog_router",
 ]

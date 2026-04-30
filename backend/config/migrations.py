@@ -211,6 +211,26 @@ def run_migrations(conn) -> None:
     # "no such column: updated_at".
     _add_column(conn, "time_cards", "updated_at", "TEXT")
 
+    # Migration 002d: parts_catalog (price book for re-use across estimates).
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS parts_catalog (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            part_number TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            description TEXT,
+            standard_price REAL DEFAULT 0,
+            standard_cost REAL DEFAULT 0,
+            part_type TEXT,
+            preferred_vendor_id INTEGER REFERENCES vendors(id),
+            vehicle_compat TEXT,
+            notes TEXT,
+            usage_count INTEGER DEFAULT 0,
+            last_used_date TEXT,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+
     # Migration 002c: vehicle type + type-specific fields. Existing rows default
     # to 'tractor' (most common at this shop) so the UI keeps showing VIN and
     # mileage by default; admin can change the type per vehicle.

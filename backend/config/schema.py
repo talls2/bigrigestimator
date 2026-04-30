@@ -295,6 +295,23 @@ TABLES = [
     )""",
 
     # ── Part Invoices ──
+    # ── Parts Catalog (price book that grows as parts are estimated) ──
+    """CREATE TABLE IF NOT EXISTS parts_catalog (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        part_number TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        description TEXT,
+        standard_price REAL DEFAULT 0,
+        standard_cost REAL DEFAULT 0,
+        part_type TEXT,
+        preferred_vendor_id INTEGER REFERENCES vendors(id),
+        vehicle_compat TEXT,
+        notes TEXT,
+        usage_count INTEGER DEFAULT 0,
+        last_used_date TEXT,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+    )""",
+
     """CREATE TABLE IF NOT EXISTS part_invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         invoice_number TEXT,

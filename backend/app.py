@@ -33,6 +33,7 @@ from routes import (
     auth_router,
     export_router,
     tecstation_router,
+    parts_catalog_router,
 )
 
 # ─── App Setup ───
@@ -66,6 +67,7 @@ app.include_router(production_router)
 app.include_router(auth_router)
 app.include_router(export_router)
 app.include_router(tecstation_router)
+app.include_router(parts_catalog_router)
 
 
 # ─── Database Initialization ───

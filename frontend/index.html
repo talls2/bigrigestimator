@@ -1154,13 +1154,16 @@ function EstimateDetail({ id, navigate }) {
     const [est, setEst] = useState(null);
     const [showAddLine, setShowAddLine] = useState(false);
     const [rates, setRates] = useState([]);
+    const [catalog, setCatalog] = useState([]);
+    const [catalogPrompt, setCatalogPrompt] = useState(null);  // {part_number, description, price, cost, existing} or null
     const [lineForm, setLineForm] = useState({ line_type: 'labor', operation: '', description: '', part_number: '', part_type: 'OEM',
         quantity: 1, labor_hours: 0, labor_rate: 0, paint_hours: 0, paint_rate: 0, part_price: 0, part_cost: 0, taxable: false, notes: '' });
     const [lineSaving, setLineSaving] = useState(false);
 
     const load = () => api(`/estimates/${id}`).then(setEst);
+    const loadCatalog = () => api('/parts-catalog').then(setCatalog).catch(() => setCatalog([]));
     useEffect(() => { load(); }, [id]);
-    useEffect(() => { api('/shop/rates').then(setRates).catch(() => {}); }, []);
+    useEffect(() => { api('/shop/rates').then(setRates).catch(() => {}); loadCatalog(); }, []);
 
     // Auto-fill rate (and default taxability) when type changes
     const setLineField = (field, val) => {
@@ -1174,6 +1177,16 @@ function EstimateDetail({ id, navigate }) {
                 else { next.labor_hours = 0; next.labor_rate = 0; next.paint_hours = 0; next.paint_rate = 0; next.part_number = ''; }
                 // Parts default to taxable; everything else defaults to non-taxable.
                 next.taxable = val === 'part';
+            }
+            // When typing/picking a part number on a part line, look up in the catalog
+            // and auto-fill description + price + cost if we have it on file.
+            if (field === 'part_number' && next.line_type === 'part') {
+                const match = catalog.find(c => (c.part_number||'').toUpperCase() === (val||'').toUpperCase());
+                if (match) {
+                    if (!next.description) next.description = match.description || '';
+                    if (!parseFloat(next.part_price)) next.part_price = match.standard_price || 0;
+                    if (!parseFloat(next.part_cost))  next.part_cost  = match.standard_cost  || 0;
+                }
             }
             return next;
         });
@@ -1207,12 +1220,45 @@ function EstimateDetail({ id, navigate }) {
                 notes: lineForm.notes || null,
             };
             await api(`/estimates/${id}/lines`, { method: 'POST', body });
+
+            // After a part with a part_number is added, prompt to save/update the catalog.
+            if (body.line_type === 'part' && body.part_number) {
+                const existing = catalog.find(c => (c.part_number||'').toUpperCase() === body.part_number.toUpperCase());
+                const priceChanged = existing && Math.abs((existing.standard_price||0) - body.part_price) > 0.005;
+                if (!existing || priceChanged) {
+                    setCatalogPrompt({
+                        part_number: body.part_number,
+                        description: body.description,
+                        price: body.part_price,
+                        cost: body.part_cost,
+                        part_type: body.part_type,
+                        existing: existing || null,
+                        priceChanged,
+                    });
+                }
+            }
+
             setLineForm({ line_type: lineForm.line_type, operation: '', description: '', part_number: '', part_type: 'OEM',
                 quantity: 1, labor_hours: 0, labor_rate: body.labor_rate, paint_hours: 0, paint_rate: body.paint_rate, part_price: 0, part_cost: 0,
                 taxable: lineForm.line_type === 'part', notes: '' });
             load();
         } catch (err) { alert(err.message); }
         setLineSaving(false);
+    };
+
+    const acceptCatalogSave = async () => {
+        if (!catalogPrompt) return;
+        try {
+            await api('/parts-catalog', { method: 'POST', body: {
+                part_number: catalogPrompt.part_number,
+                description: catalogPrompt.description,
+                standard_price: catalogPrompt.price,
+                standard_cost: catalogPrompt.cost,
+                part_type: catalogPrompt.part_type,
+            }});
+            setCatalogPrompt(null);
+            loadCatalog();
+        } catch (err) { alert('Failed to save to catalog: ' + (err.message || err)); }
     };
 
     const deleteLine = async (lineId) => {
@@ -1373,8 +1419,15 @@ function EstimateDetail({ id, navigate }) {
 
                             {lt === 'part' && <>
                                 <div className="form-group">
-                                    <label>Part Number</label>
-                                    <input value={lineForm.part_number} onChange={e => setLineField('part_number', e.target.value)} placeholder="Part #" />
+                                    <label>Part Number {catalog.length > 0 && <span className="text-muted text-sm">(autocompletes from catalog)</span>}</label>
+                                    <input list="parts-catalog-options" value={lineForm.part_number}
+                                           onChange={e => setLineField('part_number', e.target.value)}
+                                           placeholder="Part # — type to search catalog" />
+                                    <datalist id="parts-catalog-options">
+                                        {catalog.slice(0, 200).map(p => (
+                                            <option key={p.id} value={p.part_number}>{p.description ? `${p.description} — $${p.standard_price?.toFixed(2)||'0.00'}` : `$${p.standard_price?.toFixed(2)||'0.00'}`}</option>
+                                        ))}
+                                    </datalist>
                                 </div>
                                 <div className="form-group">
                                     <label>Part Type</label>
@@ -1501,6 +1554,39 @@ function EstimateDetail({ id, navigate }) {
                     </div>
                 </div>
             </div>
+
+            {/* ── Save-to-catalog prompt after a part with a part_number is added ── */}
+            <Modal open={!!catalogPrompt} onClose={() => setCatalogPrompt(null)}
+                   title={catalogPrompt?.existing ? 'Update price in catalog?' : 'Save part to catalog?'}>
+                {catalogPrompt && (
+                    <div>
+                        <div style={{fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5}}>
+                            {catalogPrompt.existing
+                                ? `You already have part #${catalogPrompt.part_number} in the catalog at ${fmt(catalogPrompt.existing.standard_price)}. The new price you just quoted is different — should I update the catalog so future estimates use the new price?`
+                                : 'Saving this part to the catalog means next time you type this Part Number on a new estimate, the description and price auto-fill — no need to call the vendor again.'}
+                        </div>
+                        <div style={{padding:14, background:'var(--bg)', borderRadius:8, border:'1px solid var(--border)', marginBottom:16}}>
+                            <div className="detail-row"><span className="detail-label">Part #</span><span className="detail-value" style={{fontFamily:'monospace', fontWeight:600}}>{catalogPrompt.part_number}</span></div>
+                            <div className="detail-row"><span className="detail-label">Description</span><span className="detail-value">{catalogPrompt.description||'—'}</span></div>
+                            {catalogPrompt.existing && (
+                                <div className="detail-row"><span className="detail-label">Old Price</span><span className="detail-value money text-muted" style={{textDecoration:'line-through'}}>{fmt(catalogPrompt.existing.standard_price)}</span></div>
+                            )}
+                            <div className="detail-row"><span className="detail-label">{catalogPrompt.existing ? 'New Price' : 'Price'}</span><span className="detail-value money" style={{fontWeight:600, color:'var(--primary)'}}>{fmt(catalogPrompt.price)}</span></div>
+                            {catalogPrompt.cost > 0 && (
+                                <div className="detail-row"><span className="detail-label">Cost</span><span className="detail-value money">{fmt(catalogPrompt.cost)}</span></div>
+                            )}
+                        </div>
+                        <div className="modal-actions">
+                            <button className="btn btn-outline" onClick={() => setCatalogPrompt(null)}>
+                                <i className="fas fa-times"></i> Skip
+                            </button>
+                            <button className="btn btn-primary" onClick={acceptCatalogSave}>
+                                <i className="fas fa-database"></i> {catalogPrompt.existing ? 'Update Catalog' : 'Save to Catalog'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </div>
     );
 }
@@ -1651,6 +1737,28 @@ function RODetail({ id, navigate }) {
                         <option value="delivered">Delivered</option>
                         <option value="closed">Closed</option>
                     </select>
+                    {(() => {
+                        const cards = ro.time_cards || [];
+                        const hours = cards.reduce((s, t) => {
+                            if (t.hours_worked) return s + t.hours_worked;
+                            const cIn = parseStamp(t.clock_in);
+                            return cIn ? s + Math.max(0, (Date.now() - cIn.getTime())/3600000) : s;
+                        }, 0);
+                        const anyOpen = cards.some(c => !c.clock_out);
+                        return (
+                            <span onClick={() => setTab('timecards')}
+                                  title="Total hours logged on this RO — click to see breakdown"
+                                  style={{cursor:'pointer', fontSize:13, fontWeight:600,
+                                          padding:'4px 10px', borderRadius:6,
+                                          background: anyOpen ? 'rgba(34,197,94,0.15)' : 'rgba(77,184,106,0.12)',
+                                          color: anyOpen ? '#22c55e' : 'var(--primary)',
+                                          border: '1px solid', borderColor: anyOpen ? '#22c55e' : 'var(--primary)',
+                                          marginLeft: 4, display: 'inline-flex', alignItems: 'center', gap: 4}}>
+                                <i className={anyOpen ? 'fas fa-circle' : 'fas fa-clock'} style={{fontSize: anyOpen ? 8 : 11}}></i>
+                                {hours.toFixed(1)}h logged
+                            </span>
+                        );
+                    })()}
                 </div>
                 <div className="flex gap-2">
                     <a href={`${API}/exports/ro/${id}/invoice-pdf`} target="_blank" className="btn btn-primary"><i className="fas fa-file-invoice"></i> Invoice PDF</a>
@@ -2969,10 +3077,16 @@ function TimeClock({ user, onLogout }) {
 
     useEffect(() => {
         if (!user.employee_id) return;
-        api(`/repair-orders?assigned_to=${user.employee_id}`).then(ros => {
-            const active = ros.filter(r => ['open','in_progress'].includes(r.status));
-            setMyJobs(active);
-        }).catch(() => {});
+        const fetchJobs = () => {
+            api(`/repair-orders?assigned_to=${user.employee_id}`).then(ros => {
+                const active = ros.filter(r => ['open','in_progress'].includes(r.status));
+                setMyJobs(active);
+            }).catch(() => {});
+        };
+        fetchJobs();
+        // Auto-refresh so newly assigned ROs show up mid-shift without re-login.
+        const t = setInterval(fetchJobs, 30000);
+        return () => clearInterval(t);
     }, [user.employee_id]);
 
     // Show a brief success screen, then auto-logout so the next worker can use the
