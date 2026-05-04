@@ -1650,11 +1650,24 @@ function RODetail({ id, navigate }) {
     const [employees, setEmployees] = useState([]);
     const [team, setTeam] = useState([]);
     const [newTeamMember, setNewTeamMember] = useState({employee_id:'', role:''});
+    const [rates, setRates] = useState([]);
+    const [catalog, setCatalog] = useState([]);
+    const [showAddLine, setShowAddLine] = useState(false);
+    const [supplementWarn, setSupplementWarn] = useState(null);  // {newLineTotal} when about to add
+    const [catalogPrompt, setCatalogPrompt] = useState(null);
+    const [lineForm, setLineForm] = useState({ line_type: 'labor', operation: '', description: '', part_number: '', part_type: 'OEM',
+        quantity: 1, labor_hours: 0, labor_rate: 0, paint_hours: 0, paint_rate: 0, part_price: 0, part_cost: 0, taxable: false, notes: '' });
+    const [lineSaving, setLineSaving] = useState(false);
 
     const load = () => api(`/repair-orders/${id}`).then(setRo);
     const loadTeam = () => api(`/repair-orders/${id}/team`).then(setTeam).catch(() => setTeam([]));
+    const loadCatalog = () => api('/parts-catalog').then(setCatalog).catch(() => setCatalog([]));
     useEffect(() => { load(); loadTeam(); }, [id]);
-    useEffect(() => { api('/employees').then(setEmployees).catch(() => setEmployees([])); }, []);
+    useEffect(() => {
+        api('/employees').then(setEmployees).catch(() => setEmployees([]));
+        api('/shop/rates').then(setRates).catch(() => {});
+        loadCatalog();
+    }, []);
     if (!ro) return <div className="empty-state"><i className="fas fa-spinner fa-spin"></i></div>;
 
     const addTeamMember = async () => {
@@ -1677,6 +1690,108 @@ function RODetail({ id, navigate }) {
             await api(`/repair-orders/${id}/team/${assignmentId}`, { method: 'DELETE' });
             loadTeam();
         } catch (err) { alert('Failed to remove: ' + (err.message || err)); }
+    };
+
+    // ── Add-line form helpers (mirrors EstimateDetail) ──
+    const setLineField = (field, val) => {
+        setLineForm(prev => {
+            const next = {...prev, [field]: val};
+            if (field === 'line_type') {
+                const findRate = (kw) => { const r = rates.find(r => r.rate_type.includes(kw)); return r ? r.rate_amount : 0; };
+                if (val === 'labor') { next.labor_rate = findRate('body_labor') || findRate('labor'); next.paint_rate = 0; next.paint_hours = 0; next.part_price = 0; next.part_cost = 0; next.part_number = ''; }
+                else if (val === 'paint' || val === 'refinish') { next.paint_rate = findRate('paint') || findRate('refinish'); next.labor_rate = 0; next.labor_hours = 0; next.part_price = 0; next.part_cost = 0; next.part_number = ''; }
+                else if (val === 'part') { next.labor_hours = 0; next.labor_rate = 0; next.paint_hours = 0; next.paint_rate = 0; }
+                else { next.labor_hours = 0; next.labor_rate = 0; next.paint_hours = 0; next.paint_rate = 0; next.part_number = ''; }
+                next.taxable = val === 'part';
+            }
+            if (field === 'part_number' && next.line_type === 'part') {
+                const m = catalog.find(c => (c.part_number||'').toUpperCase() === (val||'').toUpperCase());
+                if (m) {
+                    if (!next.description) next.description = m.description || '';
+                    if (!parseFloat(next.part_price)) next.part_price = m.standard_price || 0;
+                    if (!parseFloat(next.part_cost))  next.part_cost  = m.standard_cost  || 0;
+                }
+            }
+            return next;
+        });
+    };
+
+    const computeLineTotal = () => {
+        const lt = lineForm.line_type;
+        if (lt === 'part')   return (parseFloat(lineForm.part_price)||0) * (parseFloat(lineForm.quantity)||1);
+        if (lt === 'labor')  return (parseFloat(lineForm.labor_hours)||0) * (parseFloat(lineForm.labor_rate)||0);
+        if (lt === 'paint' || lt === 'refinish') return (parseFloat(lineForm.paint_hours)||0) * (parseFloat(lineForm.paint_rate)||0);
+        return parseFloat(lineForm.part_price)||0;
+    };
+
+    // Step 1: clicking "Add Line" opens the warning showing the price impact.
+    const requestAddLine = () => {
+        if (!lineForm.description) return alert('Please fill in a description first.');
+        setSupplementWarn({ newLineTotal: computeLineTotal() });
+    };
+
+    // Step 2: confirming the warning actually saves the line as a supplement.
+    const confirmAddLine = async () => {
+        setSupplementWarn(null);
+        setLineSaving(true);
+        try {
+            const body = {
+                line_type: lineForm.line_type,
+                operation: lineForm.operation || null,
+                description: lineForm.description,
+                part_number: lineForm.part_number || null,
+                part_type: lineForm.line_type === 'part' ? lineForm.part_type : null,
+                quantity: parseFloat(lineForm.quantity) || 1,
+                labor_hours: parseFloat(lineForm.labor_hours) || 0,
+                labor_rate: parseFloat(lineForm.labor_rate) || 0,
+                paint_hours: parseFloat(lineForm.paint_hours) || 0,
+                paint_rate: parseFloat(lineForm.paint_rate) || 0,
+                part_price: parseFloat(lineForm.part_price) || 0,
+                part_cost: parseFloat(lineForm.part_cost) || 0,
+                taxable: lineForm.taxable ? 1 : 0,
+                notes: lineForm.notes || null,
+            };
+            await api(`/repair-orders/${id}/lines`, { method: 'POST', body });
+
+            // Catalog prompt for new parts (same flow as estimates)
+            if (body.line_type === 'part' && body.part_number) {
+                const existing = catalog.find(c => (c.part_number||'').toUpperCase() === body.part_number.toUpperCase());
+                const priceChanged = existing && Math.abs((existing.standard_price||0) - body.part_price) > 0.005;
+                if (!existing || priceChanged) {
+                    setCatalogPrompt({
+                        part_number: body.part_number, description: body.description,
+                        price: body.part_price, cost: body.part_cost, part_type: body.part_type,
+                        existing: existing || null, priceChanged,
+                    });
+                }
+            }
+
+            setLineForm({ line_type: lineForm.line_type, operation: '', description: '', part_number: '', part_type: 'OEM',
+                quantity: 1, labor_hours: 0, labor_rate: body.labor_rate, paint_hours: 0, paint_rate: body.paint_rate, part_price: 0, part_cost: 0,
+                taxable: lineForm.line_type === 'part', notes: '' });
+            load();
+        } catch (err) { alert('Failed to add line: ' + (err.message || err)); }
+        setLineSaving(false);
+    };
+
+    const acceptCatalogSave = async () => {
+        if (!catalogPrompt) return;
+        try {
+            await api('/parts-catalog', { method: 'POST', body: {
+                part_number: catalogPrompt.part_number, description: catalogPrompt.description,
+                standard_price: catalogPrompt.price, standard_cost: catalogPrompt.cost, part_type: catalogPrompt.part_type,
+            }});
+            setCatalogPrompt(null);
+            loadCatalog();
+        } catch (err) { alert('Failed to save to catalog: ' + (err.message || err)); }
+    };
+
+    const deleteLine = async (lineId) => {
+        if (!confirm('Delete this line? Total will be recalculated.')) return;
+        try {
+            await api(`/repair-orders/${id}/lines/${lineId}`, { method: 'DELETE' });
+            load();
+        } catch (err) { alert('Failed to delete line: ' + (err.message || err)); }
     };
 
     // Suggest the common shop roles plus any roles already used on this RO
@@ -1867,18 +1982,103 @@ function RODetail({ id, navigate }) {
 
             {tab === 'lines' && (
                 <div className="card">
+                    <div className="card-header" style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                        <h3 style={{margin:0}}>Line Items ({(ro.lines||[]).length})</h3>
+                        {ro.status !== 'closed' && ro.status !== 'delivered' && (
+                            <button className="btn btn-primary btn-sm" onClick={() => setShowAddLine(!showAddLine)}>
+                                <i className={`fas fa-${showAddLine ? 'times' : 'plus'}`}></i> {showAddLine ? 'Cancel' : 'Add Supplement Line'}
+                            </button>
+                        )}
+                    </div>
+
+                    {/* ── Add Supplement Line Form ── */}
+                    {showAddLine && (() => {
+                        const lt = lineForm.line_type;
+                        const lineTotal = computeLineTotal();
+                        return (
+                            <div style={{padding: 16, background: 'var(--bg)', borderRadius: 8, margin: '12px 0', border: '1px dashed var(--border)'}}>
+                                <div style={{display:'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap'}}>
+                                    {[{v:'labor',l:'Labor'},{v:'paint',l:'Paint/Refinish'},{v:'part',l:'Parts'},{v:'sublet',l:'Sublet'},{v:'other',l:'Other'}].map(t => (
+                                        <button key={t.v} className={`btn btn-sm ${lt === t.v ? 'btn-primary' : 'btn-outline'}`}
+                                                onClick={() => setLineField('line_type', t.v)}>{t.l}</button>
+                                    ))}
+                                </div>
+                                <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap:10}}>
+                                    <div className="form-group" style={{gridColumn:'span 2'}}>
+                                        <label>Description <span style={{color:'var(--danger)'}}>*</span></label>
+                                        <input value={lineForm.description} onChange={e => setLineField('description', e.target.value)} placeholder="What was done / part name" />
+                                    </div>
+                                    {lt === 'labor' && <>
+                                        <div className="form-group"><label>Hours</label><input type="number" step="0.1" value={lineForm.labor_hours} onChange={e => setLineField('labor_hours', e.target.value)} /></div>
+                                        <div className="form-group"><label>Rate $/hr</label><input type="number" step="0.01" value={lineForm.labor_rate} onChange={e => setLineField('labor_rate', e.target.value)} /></div>
+                                    </>}
+                                    {(lt === 'paint' || lt === 'refinish') && <>
+                                        <div className="form-group"><label>Hours</label><input type="number" step="0.1" value={lineForm.paint_hours} onChange={e => setLineField('paint_hours', e.target.value)} /></div>
+                                        <div className="form-group"><label>Rate $/hr</label><input type="number" step="0.01" value={lineForm.paint_rate} onChange={e => setLineField('paint_rate', e.target.value)} /></div>
+                                    </>}
+                                    {lt === 'part' && <>
+                                        <div className="form-group">
+                                            <label>Part Number {catalog.length > 0 && <span className="text-muted text-sm">(autocompletes)</span>}</label>
+                                            <input list="ro-parts-catalog-options" value={lineForm.part_number}
+                                                   onChange={e => setLineField('part_number', e.target.value)}
+                                                   placeholder="Part # — type to search catalog" />
+                                            <datalist id="ro-parts-catalog-options">
+                                                {catalog.slice(0, 200).map(p => (
+                                                    <option key={p.id} value={p.part_number}>{p.description ? `${p.description} — $${p.standard_price?.toFixed(2)||'0.00'}` : `$${p.standard_price?.toFixed(2)||'0.00'}`}</option>
+                                                ))}
+                                            </datalist>
+                                        </div>
+                                        <div className="form-group"><label>Type</label>
+                                            <select value={lineForm.part_type} onChange={e => setLineField('part_type', e.target.value)}>
+                                                <option value="OEM">OEM (New)</option><option value="aftermarket">Aftermarket</option>
+                                                <option value="used">Used/Recycled</option><option value="reconditioned">Reconditioned</option>
+                                                <option value="remanufactured">Reman</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group"><label>Qty</label><input type="number" step="1" value={lineForm.quantity} onChange={e => setLineField('quantity', e.target.value)} /></div>
+                                        <div className="form-group"><label>Price each</label><input type="number" step="0.01" value={lineForm.part_price} onChange={e => setLineField('part_price', e.target.value)} /></div>
+                                        <div className="form-group"><label>Cost each</label><input type="number" step="0.01" value={lineForm.part_cost} onChange={e => setLineField('part_cost', e.target.value)} /></div>
+                                    </>}
+                                    {(lt === 'sublet' || lt === 'other') && (
+                                        <div className="form-group"><label>Amount</label><input type="number" step="0.01" value={lineForm.part_price} onChange={e => setLineField('part_price', e.target.value)} placeholder="0.00" /></div>
+                                    )}
+                                </div>
+                                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:12, paddingTop:12, borderTop:'1px solid var(--border)', gap:16, flexWrap:'wrap'}}>
+                                    <div style={{display:'flex', alignItems:'center', gap:16, flexWrap:'wrap'}}>
+                                        <div style={{fontSize:15, fontWeight:600}}>
+                                            Line Total: <span style={{color:'var(--primary)', fontSize:17}}>{fmt(lineTotal)}</span>
+                                        </div>
+                                        <label style={{display:'flex', alignItems:'center', gap:6, fontSize:13, cursor: ro.tax_exempt ? 'not-allowed' : 'pointer', opacity: ro.tax_exempt ? 0.5 : 1}}>
+                                            <input type="checkbox" checked={!!lineForm.taxable && !ro.tax_exempt} disabled={!!ro.tax_exempt}
+                                                   onChange={e => setLineField('taxable', e.target.checked)} />
+                                            Tax applies
+                                        </label>
+                                    </div>
+                                    <button className="btn btn-primary" onClick={requestAddLine} disabled={lineSaving || !lineForm.description}>
+                                        {lineSaving ? <><i className="fas fa-spinner fa-spin"></i> Adding...</> : <><i className="fas fa-plus"></i> Add to RO</>}
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
                     <div className="table-wrapper">
-                        <table><thead><tr><th>#</th><th>Type</th><th>Op</th><th>Description</th><th>Part #</th><th>Qty</th><th>Hours</th><th>Rate</th><th>Parts $</th><th title="Taxable">Tax</th><th>Status</th><th>Total</th></tr></thead>
+                        <table><thead><tr><th>#</th><th>Type</th><th>Op</th><th>Description</th><th>Part #</th><th>Qty</th><th>Hours</th><th>Rate</th><th>Parts $</th><th title="Taxable">Tax</th><th>Status</th><th>Total</th>{ro.status !== 'closed' && ro.status !== 'delivered' && <th></th>}</tr></thead>
                         <tbody>
                         {(ro.lines||[]).map(l => (
-                            <tr key={l.id}>
-                                <td>{l.line_number}</td><td><Badge status={l.line_type}/></td><td>{l.operation||'—'}</td>
+                            <tr key={l.id} style={l.is_supplement ? {background:'rgba(234,179,8,0.06)'} : {}}>
+                                <td>{l.line_number}{l.is_supplement ? <span className="text-muted text-sm" title={`Supplement #${l.supplement_number||1}`} style={{marginLeft:4}}>S{l.supplement_number||1}</span> : ''}</td>
+                                <td><Badge status={l.line_type}/></td><td>{l.operation||'—'}</td>
                                 <td>{l.description}</td><td className="text-sm">{l.part_number||'—'}</td>
                                 <td>{l.quantity}</td><td>{l.labor_hours||l.paint_hours||'—'}</td><td>{l.labor_rate||l.paint_rate||'—'}</td>
                                 <td className="money">{l.part_price ? fmt(l.part_price):'—'}</td>
                                 <td style={{textAlign:'center'}}>{l.taxable ? <i className="fas fa-check text-green" title="Taxable"></i> : <span className="text-muted" title="Not taxable">—</span>}</td>
                                 <td><Badge status={l.status}/></td>
                                 <td className="money" style={{fontWeight:600}}>{fmt(l.line_total)}</td>
+                                {ro.status !== 'closed' && ro.status !== 'delivered' && (
+                                    <td><button className="btn btn-outline btn-sm" onClick={() => deleteLine(l.id)} title="Delete line"
+                                            style={{color:'var(--danger)', borderColor:'var(--danger)', padding:'4px 8px'}}><i className="fas fa-trash"></i></button></td>
+                                )}
                             </tr>
                         ))}
                         </tbody></table>
@@ -2038,6 +2238,92 @@ function RODetail({ id, navigate }) {
                     <div className="form-group"><label>Payer Name</label><input value={payForm.payer_name} onChange={e => setPayForm({...payForm, payer_name: e.target.value})} /></div>
                 </div>
                 <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowPayment(false)}>Cancel</button><button className="btn btn-success" onClick={addPayment}><i className="fas fa-check"></i> Record Payment</button></div>
+            </Modal>
+
+            {/* ── Supplement warning before adding a line to an RO ── */}
+            <Modal open={!!supplementWarn} onClose={() => setSupplementWarn(null)} title="Heads up — this changes the RO total">
+                {supplementWarn && (() => {
+                    const currentTotal = ro.total_amount || 0;
+                    const lineDelta = supplementWarn.newLineTotal || 0;
+                    const taxRateRow = rates.find(r => r.rate_type === 'sales_tax_rate');
+                    const taxRate = (taxRateRow ? taxRateRow.rate_amount : 6.25) / 100;
+                    const taxOnLine = (lineForm.taxable && !ro.tax_exempt) ? lineDelta * taxRate : 0;
+                    const newTotal = currentTotal + lineDelta + taxOnLine;
+                    const origEst = ro.original_estimate_total;
+                    const diffFromEstimate = origEst != null ? (newTotal - origEst) : null;
+                    return (
+                        <div>
+                            <div style={{padding:14, background:'rgba(234,179,8,0.08)', borderLeft:'3px solid #eab308', borderRadius:6, marginBottom:14, fontSize:13}}>
+                                <i className="fas fa-exclamation-triangle" style={{color:'#eab308', marginRight:6}}></i>
+                                You're about to add a <b>supplement line</b> to this RO. The total will change from what was originally quoted on the estimate.
+                                Make sure the customer (and insurance, if applicable) is aware before you commit.
+                            </div>
+                            <div style={{padding:14, background:'var(--bg)', borderRadius:8, border:'1px solid var(--border)'}}>
+                                {origEst != null && (
+                                    <div className="detail-row"><span className="detail-label">Original Estimate{ro.original_estimate_number ? ` (${ro.original_estimate_number})` : ''}</span><span className="detail-value money">{fmt(origEst)}</span></div>
+                                )}
+                                <div className="detail-row"><span className="detail-label">Current RO Total</span><span className="detail-value money">{fmt(currentTotal)}</span></div>
+                                <div className="detail-row"><span className="detail-label">This line</span><span className="detail-value money text-green">+{fmt(lineDelta)}</span></div>
+                                {taxOnLine > 0 && (
+                                    <div className="detail-row"><span className="detail-label">Sales tax on line</span><span className="detail-value money text-green">+{fmt(taxOnLine)}</span></div>
+                                )}
+                                <div className="detail-row" style={{borderTop:'2px solid var(--primary)', paddingTop:8, marginTop:6}}>
+                                    <span className="detail-label" style={{fontWeight:700, fontSize:15}}>New Total</span>
+                                    <span className="detail-value money" style={{fontSize:18, color:'var(--primary)', fontWeight:700}}>{fmt(newTotal)}</span>
+                                </div>
+                                {diffFromEstimate != null && (
+                                    <div className="detail-row" style={{paddingTop:6}}>
+                                        <span className="detail-label text-sm">vs. original estimate</span>
+                                        <span className="detail-value money text-sm" style={{color: diffFromEstimate > 0 ? 'var(--danger)' : 'var(--text-muted)'}}>
+                                            {diffFromEstimate > 0 ? '+' : ''}{fmt(diffFromEstimate)}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="modal-actions">
+                                <button className="btn btn-outline" onClick={() => setSupplementWarn(null)}>
+                                    <i className="fas fa-times"></i> Cancel
+                                </button>
+                                <button className="btn btn-warning" onClick={confirmAddLine} disabled={lineSaving}>
+                                    <i className="fas fa-plus"></i> Add Supplement Line
+                                </button>
+                            </div>
+                        </div>
+                    );
+                })()}
+            </Modal>
+
+            {/* ── Save-to-catalog prompt after a part with a part_number is added ── */}
+            <Modal open={!!catalogPrompt} onClose={() => setCatalogPrompt(null)}
+                   title={catalogPrompt?.existing ? 'Update price in catalog?' : 'Save part to catalog?'}>
+                {catalogPrompt && (
+                    <div>
+                        <div style={{fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5}}>
+                            {catalogPrompt.existing
+                                ? `You already have part #${catalogPrompt.part_number} in the catalog at ${fmt(catalogPrompt.existing.standard_price)}. The new price you just quoted is different — should I update the catalog so future estimates use the new price?`
+                                : 'Saving this part to the catalog means next time you type this Part Number, the description and price auto-fill — no need to call the vendor again.'}
+                        </div>
+                        <div style={{padding:14, background:'var(--bg)', borderRadius:8, border:'1px solid var(--border)', marginBottom:16}}>
+                            <div className="detail-row"><span className="detail-label">Part #</span><span className="detail-value" style={{fontFamily:'monospace', fontWeight:600}}>{catalogPrompt.part_number}</span></div>
+                            <div className="detail-row"><span className="detail-label">Description</span><span className="detail-value">{catalogPrompt.description||'—'}</span></div>
+                            {catalogPrompt.existing && (
+                                <div className="detail-row"><span className="detail-label">Old Price</span><span className="detail-value money text-muted" style={{textDecoration:'line-through'}}>{fmt(catalogPrompt.existing.standard_price)}</span></div>
+                            )}
+                            <div className="detail-row"><span className="detail-label">{catalogPrompt.existing ? 'New Price' : 'Price'}</span><span className="detail-value money" style={{fontWeight:600, color:'var(--primary)'}}>{fmt(catalogPrompt.price)}</span></div>
+                            {catalogPrompt.cost > 0 && (
+                                <div className="detail-row"><span className="detail-label">Cost</span><span className="detail-value money">{fmt(catalogPrompt.cost)}</span></div>
+                            )}
+                        </div>
+                        <div className="modal-actions">
+                            <button className="btn btn-outline" onClick={() => setCatalogPrompt(null)}>
+                                <i className="fas fa-times"></i> Skip
+                            </button>
+                            <button className="btn btn-primary" onClick={acceptCatalogSave}>
+                                <i className="fas fa-database"></i> {catalogPrompt.existing ? 'Update Catalog' : 'Save to Catalog'}
+                            </button>
+                        </div>
+                    </div>
+                )}
             </Modal>
         </div>
     );

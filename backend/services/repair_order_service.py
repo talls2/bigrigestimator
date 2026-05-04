@@ -113,6 +113,26 @@ class RepairOrderService:
         if data.get("taxable") is None:
             data["taxable"] = 1 if data.get("line_type") == "part" else 0
 
+        # Lines added AFTER an RO already has lines (i.e. after conversion from
+        # estimate) are supplements — additional damage/work found during repair.
+        # Auto-flag them so they show as supplements on invoices/reports, unless
+        # the caller explicitly says otherwise.
+        if not data.get("is_supplement"):
+            from config.database import get_db
+            with get_db() as db:
+                stats = db.execute(
+                    "SELECT COUNT(*) AS n, COALESCE(MAX(supplement_number), 0) AS m FROM ro_lines WHERE ro_id = ?",
+                    (ro_id,),
+                ).fetchone()
+            existing_lines = stats["n"] if stats else 0
+            current_max_supp = stats["m"] if stats else 0
+            if existing_lines > 0:
+                data["is_supplement"] = 1
+                # Default to current supplement number (or 1 if none yet); admin
+                # can bump this manually for a new round of insurance approval.
+                if not data.get("supplement_number"):
+                    data["supplement_number"] = max(1, current_max_supp)
+
         # Add the line
         line_id = self.repo.add_line(ro_id, data)
 
@@ -120,6 +140,17 @@ class RepairOrderService:
         self.repo.recalc_totals(ro_id)
 
         return line_id
+
+    def delete_line(self, ro_id: int, line_id: int) -> None:
+        """Delete a line item from an RO and recompute totals."""
+        existing = self.repo.get_by_id(ro_id)
+        if not existing:
+            raise ValueError(f"Repair order {ro_id} not found")
+        from config.database import get_db
+        with get_db() as db:
+            db.execute("DELETE FROM ro_lines WHERE id = ? AND ro_id = ?", (line_id, ro_id))
+            db.commit()
+        self.repo.recalc_totals(ro_id)
 
     def add_payment(self, ro_id: int, data: dict) -> int:
         """

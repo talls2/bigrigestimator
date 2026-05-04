@@ -121,10 +121,22 @@ def update_repair_order(ro_id: int, data: RepairOrderIn):
 
 @router.post("/{ro_id}/lines")
 def add_repair_order_line(ro_id: int, data: RepairOrderLineIn):
-    """Add a line item to a repair order."""
+    """Add a line item to a repair order. Auto-flagged as a supplement if the RO already has lines."""
     try:
         line_id = service.add_line(ro_id, data.dict())
         return {"id": line_id, "message": "Line item added successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{ro_id}/lines/{line_id}")
+def delete_repair_order_line(ro_id: int, line_id: int):
+    """Delete an RO line item and recompute totals."""
+    try:
+        service.delete_line(ro_id, line_id)
+        return {"message": "Line item deleted"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

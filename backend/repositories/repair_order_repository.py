@@ -58,7 +58,9 @@ class RepairOrderRepository(BaseRepository):
                     ic.company_name AS insurance_name, ic.phone AS insurance_phone,
                     est.first_name AS estimator_first, est.last_name AS estimator_last,
                     tech.first_name AS tech_first, tech.last_name AS tech_last,
-                    ptr.first_name AS painter_first, ptr.last_name AS painter_last
+                    ptr.first_name AS painter_first, ptr.last_name AS painter_last,
+                    e.total_amount AS original_estimate_total,
+                    e.estimate_number AS original_estimate_number
                 FROM repair_orders ro
                 LEFT JOIN customers c ON ro.customer_id = c.id
                 LEFT JOIN vehicles v ON ro.vehicle_id = v.id
@@ -66,6 +68,7 @@ class RepairOrderRepository(BaseRepository):
                 LEFT JOIN employees est ON ro.estimator_id = est.id
                 LEFT JOIN employees tech ON ro.technician_id = tech.id
                 LEFT JOIN employees ptr ON ro.painter_id = ptr.id
+                LEFT JOIN estimates e ON ro.estimate_id = e.id
                 WHERE ro.id = ?
             """, (rid,)).fetchone()
             if not ro:
