@@ -177,4 +177,112 @@ def mitchell_connect_export(date_from: Optional[str] = Query(None),
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/estimates-csv")
+def estimates_csv_export(date_from: Optional[str] = Query(None),
+                         date_to: Optional[str] = Query(None),
+                         status: Optional[str] = Query(None)):
+    """Export estimates to CSV for a date range, optionally filtered by status."""
+    import csv, io as _io
+    from datetime import date as _date_t
+
+    query = """
+        SELECT e.estimate_number, e.estimate_date, e.loss_date, e.status,
+               e.point_of_impact, e.damage_description,
+               c.first_name, c.last_name, c.company_name, c.phone_home, c.email,
+               v.year, v.make, v.model, v.vin, v.color, v.license_plate,
+               ic.company_name AS insurance_name, e.claim_number, e.policy_number,
+               e.deductible,
+               emp.first_name AS estimator_first, emp.last_name AS estimator_last,
+               e.subtotal_labor, e.subtotal_parts, e.subtotal_paint, e.subtotal_other,
+               e.tax_amount, e.tax_exempt, e.total_amount,
+               e.created_at
+        FROM estimates e
+        LEFT JOIN customers c ON e.customer_id = c.id
+        LEFT JOIN vehicles v ON e.vehicle_id = v.id
+        LEFT JOIN insurance_companies ic ON e.insurance_company_id = ic.id
+        LEFT JOIN employees emp ON e.estimator_id = emp.id
+        WHERE 1=1
+    """
+    params = []
+    if date_from:
+        query += " AND e.estimate_date >= ?"
+        params.append(date_from)
+    if date_to:
+        query += " AND e.estimate_date <= ?"
+        params.append(date_to)
+    if status:
+        query += " AND e.status = ?"
+        params.append(status)
+    query += " ORDER BY e.estimate_date DESC, e.estimate_number DESC"
+
+    with get_db() as db:
+        rows = rows_to_list(db.execute(query, params).fetchall())
+
+    buf = _io.StringIO()
+    w = csv.writer(buf)
+    w.writerow([
+        "Estimate #", "Date", "Status", "Customer", "Phone", "Email",
+        "Vehicle", "VIN", "Color", "Plate",
+        "Insurance", "Claim #", "Policy #", "Deductible",
+        "Loss Date", "Point of Impact", "Damage Description",
+        "Estimator",
+        "Subtotal Labor", "Subtotal Parts", "Subtotal Paint", "Subtotal Other",
+        "Tax", "Tax Exempt", "Total",
+        "Created",
+    ])
+    for r in rows:
+        cust = r.get("company_name") or " ".join(x for x in [r.get("first_name"), r.get("last_name")] if x) or "—"
+        veh = " ".join(str(x) for x in [r.get("year"), r.get("make"), r.get("model")] if x) or "—"
+        estimator = " ".join(x for x in [r.get("estimator_first"), r.get("estimator_last")] if x) or ""
+        w.writerow([
+            r.get("estimate_number") or "",
+            r.get("estimate_date") or "",
+            r.get("status") or "",
+            cust,
+            r.get("phone_home") or "",
+            r.get("email") or "",
+            veh,
+            r.get("vin") or "",
+            r.get("color") or "",
+            r.get("license_plate") or "",
+            r.get("insurance_name") or "",
+            r.get("claim_number") or "",
+            r.get("policy_number") or "",
+            f"{r.get('deductible') or 0:.2f}",
+            r.get("loss_date") or "",
+            r.get("point_of_impact") or "",
+            (r.get("damage_description") or "").replace("\n", " ").replace("\r", " "),
+            estimator,
+            f"{r.get('subtotal_labor') or 0:.2f}",
+            f"{r.get('subtotal_parts') or 0:.2f}",
+            f"{r.get('subtotal_paint') or 0:.2f}",
+            f"{r.get('subtotal_other') or 0:.2f}",
+            f"{r.get('tax_amount') or 0:.2f}",
+            "Yes" if r.get("tax_exempt") else "No",
+            f"{r.get('total_amount') or 0:.2f}",
+            r.get("created_at") or "",
+        ])
+
+    if rows:
+        sums = {k: sum(float(r.get(col) or 0) for r in rows) for k, col in
+                [("labor","subtotal_labor"),("parts","subtotal_parts"),("paint","subtotal_paint"),
+                 ("other","subtotal_other"),("tax","tax_amount"),("total","total_amount")]}
+        w.writerow([])
+        w.writerow([f"TOTALS ({len(rows)} estimates)"] + [""] * 17 +
+                   [f"{sums['labor']:.2f}", f"{sums['parts']:.2f}", f"{sums['paint']:.2f}", f"{sums['other']:.2f}",
+                    f"{sums['tax']:.2f}", "", f"{sums['total']:.2f}", ""])
+
+    today = _date_t.today().isoformat()
+    range_part = ""
+    if date_from or date_to:
+        range_part = f"_{date_from or 'start'}_to_{date_to or today}"
+    filename = f"estimates{range_part}.csv"
+
+    return StreamingResponse(
+        io.BytesIO(buf.getvalue().encode("utf-8-sig")),  # BOM so Excel reads UTF-8 right
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
 import io

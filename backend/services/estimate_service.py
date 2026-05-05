@@ -139,7 +139,7 @@ class EstimateService:
         # Recalculate totals
         self.estimate_repo.recalc_totals(estimate_id)
 
-    def convert_to_ro(self, estimate_id: int) -> int:
+    def convert_to_ro(self, estimate_id: int, team: list[dict] | None = None) -> int:
         """
         Convert an estimate to a repair order.
         Creates a new RO with all estimate data and lines copied over.
@@ -147,12 +147,16 @@ class EstimateService:
 
         Args:
             estimate_id: Estimate ID to convert
+            team: Optional list of {employee_id, role} dicts to assign as the
+                  initial RO team. At least one entry IS REQUIRED — every RO
+                  needs someone assigned to it (a worker, an estimator, etc.).
 
         Returns:
             New repair order ID
 
         Raises:
-            ValueError: If estimate not found or already converted
+            ValueError: If estimate not found, already converted, or no team
+                        provided.
         """
         # Get full estimate data
         estimate = self.estimate_repo.get_full(estimate_id)
@@ -161,6 +165,16 @@ class EstimateService:
 
         if estimate.get("status") == "converted":
             raise ValueError(f"Estimate {estimate_id} is already converted")
+
+        # Require at least one worker on the team. The estimator from the
+        # estimate counts as a fallback — they're already on the record.
+        team = team or []
+        valid_team = [t for t in team if t.get("employee_id") and (t.get("role") or "").strip()]
+        if not valid_team and not estimate.get("estimator_id"):
+            raise ValueError(
+                "At least one worker must be assigned before converting to a repair order. "
+                "Pick at least one worker (technician, painter, body tech, etc.) and a role."
+            )
 
         # Prepare RO data from estimate
         ro_data = {
@@ -211,16 +225,22 @@ class EstimateService:
         # Recompute totals so any tax-rate change since the estimate is reflected.
         self.ro_repo.recalc_totals(ro_id)
 
-        # Seed the RO team from the estimator on the estimate, if any, so it shows
-        # up under "Team" on the RO detail without manual re-entry.
-        if estimate.get("estimator_id"):
-            from config.database import get_db
-            with get_db() as db:
+        # Seed the RO team:
+        # 1. The estimator from the estimate (always added if set) — recorded as 'estimator' role.
+        # 2. Any team members the user explicitly chose at conversion time.
+        from config.database import get_db
+        with get_db() as db:
+            if estimate.get("estimator_id"):
                 db.execute(
                     "INSERT INTO ro_assignments (ro_id, employee_id, role) VALUES (?, ?, ?)",
                     (ro_id, estimate["estimator_id"], "estimator"),
                 )
-                db.commit()
+            for member in valid_team:
+                db.execute(
+                    "INSERT INTO ro_assignments (ro_id, employee_id, role) VALUES (?, ?, ?)",
+                    (ro_id, int(member["employee_id"]), member["role"].strip()),
+                )
+            db.commit()
 
         # Mark estimate as converted
         self.estimate_repo.update(estimate_id, {"status": "converted"})

@@ -123,14 +123,23 @@ def delete_estimate_line(estimate_id: int, line_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class TeamMember(BaseModel):
+    employee_id: int
+    role: str
+
+
+class ConvertToRoIn(BaseModel):
+    team: Optional[list[TeamMember]] = None
+
+
 @router.post("/{estimate_id}/convert-to-ro")
-def convert_estimate_to_ro(estimate_id: int):
-    """Convert an estimate to a repair order."""
+def convert_estimate_to_ro(estimate_id: int, data: Optional[ConvertToRoIn] = None):
+    """Convert an estimate to a repair order. Requires at least one worker assigned."""
     try:
-        result = service.convert_to_ro(estimate_id)
+        team_list = [m.dict() for m in data.team] if (data and data.team) else None
+        result = service.convert_to_ro(estimate_id, team=team_list)
         if isinstance(result, dict):
             return result
-        # Backward compat: if service returns just an ID
         return {"id": result, "message": "Estimate converted to repair order successfully"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
