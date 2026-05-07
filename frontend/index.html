@@ -621,6 +621,10 @@ function CustomerDetail({ id, navigate }) {
     const emptyVeh = {vehicle_type:'tractor',vin:'',year:'',make:'',model:'',submodel:'',color:'',license_plate:'',license_state:'',mileage:'',engine_hours:'',length_feet:'',axle_count:'',notes:''};
     const [vehForm, setVehForm] = useState(emptyVeh);
 
+    const [editing, setEditing] = useState(false);
+    const [custForm, setCustForm] = useState({});
+    const [editError, setEditError] = useState('');
+
     const load = () => api(`/customers/${id}`).then(setC);
     useEffect(() => { load(); }, [id]);
 
@@ -628,6 +632,35 @@ function CustomerDetail({ id, navigate }) {
         const body = {...buildVehicleBody(vehForm), customer_id: parseInt(id)};
         await api('/vehicles', { method: 'POST', body });
         setShowVehForm(false); setVehForm(emptyVeh); load();
+    };
+
+    const openEditCustomer = () => {
+        setCustForm({
+            customer_type: c.customer_type || 'individual',
+            first_name: c.first_name || '', last_name: c.last_name || '',
+            company_name: c.company_name || '',
+            email: c.email || '',
+            phone_home: c.phone_home || '', phone_work: c.phone_work || '', phone_cell: c.phone_cell || '',
+            address: c.address || '', city: c.city || '', state: c.state || '', zip_code: c.zip_code || '',
+            notes: c.notes || '',
+        });
+        setEditError('');
+        setEditing(true);
+    };
+
+    const saveCustomer = async () => {
+        setEditError('');
+        try {
+            // Convert blanks to null so the server doesn't store empty strings
+            const body = {...custForm};
+            ['first_name','last_name','company_name','email','phone_home','phone_work','phone_cell',
+             'address','city','state','zip_code','notes'].forEach(k => { if (body[k] === '') body[k] = null; });
+            await api(`/customers/${id}`, { method: 'PUT', body });
+            setEditing(false);
+            load();
+        } catch (err) {
+            setEditError(err.message || 'Save failed');
+        }
     };
 
     if (!c) return <div className="empty-state"><i className="fas fa-spinner fa-spin"></i></div>;
@@ -639,14 +672,18 @@ function CustomerDetail({ id, navigate }) {
                     <button className="btn btn-outline btn-sm" onClick={() => navigate('customers')}><i className="fas fa-arrow-left"></i></button>
                     <h2>{custName(c)}</h2>
                 </div>
+                <button className="btn btn-primary" onClick={openEditCustomer}><i className="fas fa-edit"></i> Edit</button>
             </div>
             <div className="detail-grid">
                 <div className="card">
                     <div className="section-title"><i className="fas fa-user"></i> Contact Info</div>
                     <div className="detail-row"><span className="detail-label">Type</span><span className="detail-value">{c.customer_type}</span></div>
-                    <div className="detail-row"><span className="detail-label">Phone</span><span className="detail-value">{c.phone_home||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Phone (home)</span><span className="detail-value">{c.phone_home||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Phone (cell)</span><span className="detail-value">{c.phone_cell||'—'}</span></div>
+                    <div className="detail-row"><span className="detail-label">Phone (work)</span><span className="detail-value">{c.phone_work||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Email</span><span className="detail-value">{c.email||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Address</span><span className="detail-value">{[c.address,c.city,c.state,c.zip_code].filter(Boolean).join(', ')||'—'}</span></div>
+                    {c.notes && <div className="detail-row"><span className="detail-label">Notes</span><span className="detail-value text-sm" style={{whiteSpace:'pre-wrap'}}>{c.notes}</span></div>}
                 </div>
                 <div className="card">
                     <div className="card-header">
@@ -678,6 +715,59 @@ function CustomerDetail({ id, navigate }) {
                 <VehicleFormFields form={vehForm} set={(field, val) => setVehForm({...vehForm, [field]: val})} />
                 <div className="form-group" style={{marginTop:12}}><label>Notes</label><textarea value={vehForm.notes} onChange={e => setVehForm({...vehForm, notes: e.target.value})} /></div>
                 <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowVehForm(false)}>Cancel</button><button className="btn btn-primary" onClick={saveVehicle}><i className="fas fa-save"></i> Save Vehicle</button></div>
+            </Modal>
+
+            <Modal open={editing} onClose={() => setEditing(false)} title={`Edit ${custName(c)}`}>
+                {editError && (
+                    <div style={{padding:10, background:'rgba(220,38,38,0.1)', border:'1px solid rgba(220,38,38,0.3)', borderRadius:6, color:'var(--danger)', marginBottom:12, fontSize:13}}>
+                        {editError}
+                    </div>
+                )}
+                <div className="form-grid">
+                    <div className="form-group">
+                        <label>Type</label>
+                        <select value={custForm.customer_type||'individual'} onChange={e => setCustForm({...custForm, customer_type: e.target.value})}>
+                            <option value="individual">Individual</option>
+                            <option value="business">Business</option>
+                        </select>
+                    </div>
+                    {custForm.customer_type === 'business' ? (
+                        <div className="form-group" style={{gridColumn:'span 2'}}>
+                            <label>Company Name</label>
+                            <input value={custForm.company_name||''} onChange={e => setCustForm({...custForm, company_name: e.target.value})} />
+                        </div>
+                    ) : null}
+                    <div className="form-group">
+                        <label>First Name</label>
+                        <input value={custForm.first_name||''} onChange={e => setCustForm({...custForm, first_name: e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                        <label>Last Name</label>
+                        <input value={custForm.last_name||''} onChange={e => setCustForm({...custForm, last_name: e.target.value})} />
+                    </div>
+                    <div className="form-group" style={{gridColumn:'span 2'}}>
+                        <label>Email</label>
+                        <input type="email" value={custForm.email||''} onChange={e => setCustForm({...custForm, email: e.target.value})} placeholder="name@example.com" />
+                    </div>
+                    <div className="form-group"><label>Phone (home)</label><input value={custForm.phone_home||''} onChange={e => setCustForm({...custForm, phone_home: e.target.value})} /></div>
+                    <div className="form-group"><label>Phone (cell)</label><input value={custForm.phone_cell||''} onChange={e => setCustForm({...custForm, phone_cell: e.target.value})} /></div>
+                    <div className="form-group"><label>Phone (work)</label><input value={custForm.phone_work||''} onChange={e => setCustForm({...custForm, phone_work: e.target.value})} /></div>
+                    <div className="form-group" style={{gridColumn:'span 2'}}>
+                        <label>Address</label>
+                        <input value={custForm.address||''} onChange={e => setCustForm({...custForm, address: e.target.value})} />
+                    </div>
+                    <div className="form-group"><label>City</label><input value={custForm.city||''} onChange={e => setCustForm({...custForm, city: e.target.value})} /></div>
+                    <div className="form-group"><label>State</label><input value={custForm.state||''} onChange={e => setCustForm({...custForm, state: e.target.value})} maxLength="2" placeholder="MA" /></div>
+                    <div className="form-group"><label>ZIP</label><input value={custForm.zip_code||''} onChange={e => setCustForm({...custForm, zip_code: e.target.value})} /></div>
+                </div>
+                <div className="form-group" style={{marginTop:12}}>
+                    <label>Notes</label>
+                    <textarea value={custForm.notes||''} onChange={e => setCustForm({...custForm, notes: e.target.value})} />
+                </div>
+                <div className="modal-actions">
+                    <button className="btn btn-outline" onClick={() => setEditing(false)}>Cancel</button>
+                    <button className="btn btn-primary" onClick={saveCustomer}><i className="fas fa-save"></i> Save</button>
+                </div>
             </Modal>
         </div>
     );
