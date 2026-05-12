@@ -319,6 +319,14 @@ def run_migrations(conn) -> None:
         print("[migration] Removing restrictive customer_type CHECK on customers")
         _drop_customer_type_check(conn)
 
+    # Migration 003e: billing address fields on customers. Often the truck's
+    # physical address ("ship to") differs from where invoices get mailed
+    # ("bill to") — especially for fleets with a separate accounting office.
+    _add_column(conn, "customers", "billing_address", "TEXT")
+    _add_column(conn, "customers", "billing_city",    "TEXT")
+    _add_column(conn, "customers", "billing_state",   "TEXT")
+    _add_column(conn, "customers", "billing_zip",     "TEXT")
+
     # Migration 003c: ro_assignments join table for multi-worker assignment.
     # CREATE IF NOT EXISTS already handles fresh installs via TABLES, but on
     # a live DB we also back-fill from the legacy fixed columns the first time.

@@ -642,6 +642,8 @@ function CustomerDetail({ id, navigate }) {
             email: c.email || '',
             phone_home: c.phone_home || '', phone_work: c.phone_work || '', phone_cell: c.phone_cell || '',
             address: c.address || '', city: c.city || '', state: c.state || '', zip_code: c.zip_code || '',
+            billing_address: c.billing_address || '', billing_city: c.billing_city || '',
+            billing_state: c.billing_state || '', billing_zip: c.billing_zip || '',
             notes: c.notes || '',
         });
         setEditError('');
@@ -651,16 +653,26 @@ function CustomerDetail({ id, navigate }) {
     const saveCustomer = async () => {
         setEditError('');
         try {
-            // Convert blanks to null so the server doesn't store empty strings
             const body = {...custForm};
             ['first_name','last_name','company_name','email','phone_home','phone_work','phone_cell',
-             'address','city','state','zip_code','notes'].forEach(k => { if (body[k] === '') body[k] = null; });
+             'address','city','state','zip_code',
+             'billing_address','billing_city','billing_state','billing_zip',
+             'notes'].forEach(k => { if (body[k] === '') body[k] = null; });
             await api(`/customers/${id}`, { method: 'PUT', body });
             setEditing(false);
             load();
         } catch (err) {
             setEditError(err.message || 'Save failed');
         }
+    };
+
+    const copyAddressToBilling = () => {
+        setCustForm(prev => ({...prev,
+            billing_address: prev.address || '',
+            billing_city: prev.city || '',
+            billing_state: prev.state || '',
+            billing_zip: prev.zip_code || '',
+        }));
     };
 
     if (!c) return <div className="empty-state"><i className="fas fa-spinner fa-spin"></i></div>;
@@ -683,6 +695,13 @@ function CustomerDetail({ id, navigate }) {
                     <div className="detail-row"><span className="detail-label">Phone (work)</span><span className="detail-value">{c.phone_work||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Email</span><span className="detail-value">{c.email||'—'}</span></div>
                     <div className="detail-row"><span className="detail-label">Address</span><span className="detail-value">{[c.address,c.city,c.state,c.zip_code].filter(Boolean).join(', ')||'—'}</span></div>
+                    <div className="detail-row">
+                        <span className="detail-label">Bill To</span>
+                        <span className="detail-value">
+                            {[c.billing_address, c.billing_city, c.billing_state, c.billing_zip].filter(Boolean).join(', ')
+                             || <span className="text-muted text-sm">Same as address above</span>}
+                        </span>
+                    </div>
                     {c.notes && <div className="detail-row"><span className="detail-label">Notes</span><span className="detail-value text-sm" style={{whiteSpace:'pre-wrap'}}>{c.notes}</span></div>}
                 </div>
                 <div className="card">
@@ -759,6 +778,26 @@ function CustomerDetail({ id, navigate }) {
                     <div className="form-group"><label>City</label><input value={custForm.city||''} onChange={e => setCustForm({...custForm, city: e.target.value})} /></div>
                     <div className="form-group"><label>State</label><input value={custForm.state||''} onChange={e => setCustForm({...custForm, state: e.target.value})} maxLength="2" placeholder="MA" /></div>
                     <div className="form-group"><label>ZIP</label><input value={custForm.zip_code||''} onChange={e => setCustForm({...custForm, zip_code: e.target.value})} /></div>
+                </div>
+                <div style={{marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)'}}>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: 10}}>
+                        <div>
+                            <div style={{fontWeight: 600, fontSize: 14}}><i className="fas fa-file-invoice-dollar"></i> Billing Address</div>
+                            <div className="text-muted text-sm">Where invoices get mailed. Leave blank to use the address above.</div>
+                        </div>
+                        <button className="btn btn-outline btn-sm" onClick={copyAddressToBilling} type="button">
+                            <i className="fas fa-copy"></i> Same as address
+                        </button>
+                    </div>
+                    <div className="form-grid">
+                        <div className="form-group" style={{gridColumn:'span 2'}}>
+                            <label>Billing Address</label>
+                            <input value={custForm.billing_address||''} onChange={e => setCustForm({...custForm, billing_address: e.target.value})} />
+                        </div>
+                        <div className="form-group"><label>City</label><input value={custForm.billing_city||''} onChange={e => setCustForm({...custForm, billing_city: e.target.value})} /></div>
+                        <div className="form-group"><label>State</label><input value={custForm.billing_state||''} onChange={e => setCustForm({...custForm, billing_state: e.target.value})} maxLength="2" /></div>
+                        <div className="form-group"><label>ZIP</label><input value={custForm.billing_zip||''} onChange={e => setCustForm({...custForm, billing_zip: e.target.value})} /></div>
+                    </div>
                 </div>
                 <div className="form-group" style={{marginTop:12}}>
                     <label>Notes</label>

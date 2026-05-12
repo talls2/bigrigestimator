@@ -27,6 +27,10 @@ class CustomerIn(BaseModel):
     city: Optional[str] = None
     state: Optional[str] = None
     zip_code: Optional[str] = None
+    billing_address: Optional[str] = None
+    billing_city: Optional[str] = None
+    billing_state: Optional[str] = None
+    billing_zip: Optional[str] = None
     notes: Optional[str] = None
 
 

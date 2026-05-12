@@ -328,8 +328,24 @@ def generate_invoice_pdf(ro, lines, payments=None, shop=None):
         usage_label = "Mileage"
         usage_value = f"{ro['mileage']:,}" if ro.get("mileage") else "Unknown"
 
+    # Bill To address — prefer the billing_* fields on the customer; fall back
+    # to their primary address if no separate billing address is on file.
+    def _addr(prefix=""):
+        ln1 = ro.get(f"{prefix}address") or ""
+        city = ro.get(f"{prefix}city") or ""
+        state = ro.get(f"{prefix}state") or ""
+        zip_code = ro.get(f"{prefix}zip" if prefix else "customer_zip") or ""
+        ln2_parts = []
+        if city: ln2_parts.append(city)
+        if state or zip_code: ln2_parts.append(" ".join(x for x in [state, zip_code] if x))
+        ln2 = ", ".join(ln2_parts)
+        # ReportLab Paragraph uses <br/> for line breaks, not \n
+        return "<br/>".join(p for p in [ln1, ln2] if p)
+    bill_to_addr = _addr("billing_") or _addr("customer_") or "—"
+
     left_data = [
         ("Customer", cust_name),
+        ("Bill To", bill_to_addr),
         ("Vehicle", veh),
         (id_label, ro.get("vin", "—")),
     ]
