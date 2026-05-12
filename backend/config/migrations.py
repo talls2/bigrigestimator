@@ -28,6 +28,51 @@ def _has_legacy_rate_type_check(conn) -> bool:
     return "rate_type IN ('body_labor'" in row[0]
 
 
+def _has_legacy_customer_type_check(conn) -> bool:
+    """Detect the old restrictive CHECK on customers.customer_type."""
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='customers'"
+    ).fetchone()
+    if not row or not row[0]:
+        return False
+    return "customer_type IN ('individual','company')" in row[0]
+
+
+def _drop_customer_type_check(conn) -> None:
+    """Rebuild customers without the restrictive customer_type CHECK."""
+    cur = conn.cursor()
+    cols_info = cur.execute("PRAGMA table_info(customers)").fetchall()
+    col_names = [c[1] for c in cols_info]
+
+    cur.execute("PRAGMA foreign_keys = OFF")
+    try:
+        # Recreate with the same column list but no CHECK. Pull column defs from
+        # the live table so we don't lose any columns added by future migrations.
+        col_defs = []
+        for col in cols_info:
+            cid, name, ctype, notnull, dflt, pk = col
+            if name == "customer_type":
+                col_defs.append("customer_type TEXT DEFAULT 'individual'")
+                continue
+            parts = [name, ctype or "TEXT"]
+            if notnull:
+                parts.append("NOT NULL")
+            if dflt is not None:
+                parts.append(f"DEFAULT {dflt}")
+            if pk:
+                parts.append("PRIMARY KEY AUTOINCREMENT")
+            col_defs.append(" ".join(parts))
+        ddl = "CREATE TABLE customers__new (" + ", ".join(col_defs) + ")"
+        cur.execute(ddl)
+        col_list = ", ".join(col_names)
+        cur.execute(f"INSERT INTO customers__new ({col_list}) SELECT {col_list} FROM customers")
+        cur.execute("DROP TABLE customers")
+        cur.execute("ALTER TABLE customers__new RENAME TO customers")
+        conn.commit()
+    finally:
+        cur.execute("PRAGMA foreign_keys = ON")
+
+
 def _has_legacy_vendor_type_check(conn) -> bool:
     """Detect the old restrictive CHECK constraint on vendors.vendor_type."""
     row = conn.execute(
@@ -263,6 +308,11 @@ def run_migrations(conn) -> None:
     if _has_legacy_vendor_type_check(conn):
         print("[migration] Removing restrictive vendor_type CHECK on vendors")
         _drop_vendor_type_check(conn)
+
+    # Migration 003d: drop restrictive customers.customer_type CHECK.
+    if _has_legacy_customer_type_check(conn):
+        print("[migration] Removing restrictive customer_type CHECK on customers")
+        _drop_customer_type_check(conn)
 
     # Migration 003c: ro_assignments join table for multi-worker assignment.
     # CREATE IF NOT EXISTS already handles fresh installs via TABLES, but on

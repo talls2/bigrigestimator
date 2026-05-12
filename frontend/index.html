@@ -728,10 +728,10 @@ function CustomerDetail({ id, navigate }) {
                         <label>Type</label>
                         <select value={custForm.customer_type||'individual'} onChange={e => setCustForm({...custForm, customer_type: e.target.value})}>
                             <option value="individual">Individual</option>
-                            <option value="business">Business</option>
+                            <option value="company">Company / Business</option>
                         </select>
                     </div>
-                    {custForm.customer_type === 'business' ? (
+                    {custForm.customer_type === 'company' ? (
                         <div className="form-group" style={{gridColumn:'span 2'}}>
                             <label>Company Name</label>
                             <input value={custForm.company_name||''} onChange={e => setCustForm({...custForm, company_name: e.target.value})} />

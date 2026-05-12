@@ -25,7 +25,7 @@ TABLES = [
     # ── Customers ──
     """CREATE TABLE IF NOT EXISTS customers (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        customer_type TEXT DEFAULT 'individual' CHECK(customer_type IN ('individual','company')),
+        customer_type TEXT DEFAULT 'individual',
         first_name TEXT,
         last_name TEXT,
         company_name TEXT,
