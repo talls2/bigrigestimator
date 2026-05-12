@@ -42,30 +42,35 @@ def _drop_customer_type_check(conn) -> None:
     """Rebuild customers without the restrictive customer_type CHECK."""
     cur = conn.cursor()
     cols_info = cur.execute("PRAGMA table_info(customers)").fetchall()
-    col_names = [c[1] for c in cols_info]
+    src_col_names = [c[1] for c in cols_info]
 
     cur.execute("PRAGMA foreign_keys = OFF")
     try:
-        # Recreate with the same column list but no CHECK. Pull column defs from
-        # the live table so we don't lose any columns added by future migrations.
-        col_defs = []
-        for col in cols_info:
-            cid, name, ctype, notnull, dflt, pk = col
-            if name == "customer_type":
-                col_defs.append("customer_type TEXT DEFAULT 'individual'")
-                continue
-            parts = [name, ctype or "TEXT"]
-            if notnull:
-                parts.append("NOT NULL")
-            if dflt is not None:
-                parts.append(f"DEFAULT {dflt}")
-            if pk:
-                parts.append("PRIMARY KEY AUTOINCREMENT")
-            col_defs.append(" ".join(parts))
-        ddl = "CREATE TABLE customers__new (" + ", ".join(col_defs) + ")"
-        cur.execute(ddl)
-        col_list = ", ".join(col_names)
-        cur.execute(f"INSERT INTO customers__new ({col_list}) SELECT {col_list} FROM customers")
+        cur.execute("""
+            CREATE TABLE customers__new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_type TEXT DEFAULT 'individual',
+                first_name TEXT,
+                last_name TEXT,
+                company_name TEXT,
+                address TEXT,
+                city TEXT,
+                state TEXT,
+                zip_code TEXT,
+                phone_home TEXT,
+                phone_work TEXT,
+                phone_cell TEXT,
+                email TEXT,
+                notes TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        # Only copy columns that exist on BOTH the old and the new table.
+        new_col_names = {c[1] for c in cur.execute("PRAGMA table_info(customers__new)").fetchall()}
+        copy_cols = [c for c in src_col_names if c in new_col_names]
+        copy_list = ", ".join(copy_cols)
+        cur.execute(f"INSERT INTO customers__new ({copy_list}) SELECT {copy_list} FROM customers")
         cur.execute("DROP TABLE customers")
         cur.execute("ALTER TABLE customers__new RENAME TO customers")
         conn.commit()
