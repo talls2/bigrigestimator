@@ -331,16 +331,19 @@ def generate_invoice_pdf(ro, lines, payments=None, shop=None):
         usage_value = f"{ro['mileage']:,}" if ro.get("mileage") else "Unknown"
 
     # Build the customer's primary contact address and (separately) the billing
-    # address. Show the primary always; only show Bill To when it actually
-    # differs (no point printing the same address twice).
+    # address. Strip whitespace so " " values don't sneak through as truthy.
+    def _clean(v):
+        return (str(v).strip() if v not in (None, "") else "")
     def _addr(prefix=""):
-        ln1 = ro.get(f"{prefix}address") or ""
-        city = ro.get(f"{prefix}city") or ""
-        state = ro.get(f"{prefix}state") or ""
-        zip_code = ro.get(f"{prefix}zip" if prefix else "customer_zip") or ""
+        ln1 = _clean(ro.get(f"{prefix}address"))
+        city = _clean(ro.get(f"{prefix}city"))
+        state = _clean(ro.get(f"{prefix}state"))
+        zip_code = _clean(ro.get(f"{prefix}zip" if prefix else "customer_zip"))
         ln2_parts = []
-        if city: ln2_parts.append(city)
-        if state or zip_code: ln2_parts.append(" ".join(x for x in [state, zip_code] if x))
+        if city:
+            ln2_parts.append(city)
+        if state or zip_code:
+            ln2_parts.append(" ".join(x for x in [state, zip_code] if x))
         ln2 = ", ".join(ln2_parts)
         # ReportLab Paragraph uses <br/> for line breaks, not \n
         return "<br/>".join(p for p in [ln1, ln2] if p)
