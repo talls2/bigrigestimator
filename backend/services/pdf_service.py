@@ -351,14 +351,16 @@ def generate_invoice_pdf(ro, lines, payments=None, shop=None):
     # reads "Avon Septic / 14 Garden St / Avon, MA 02322" — typical invoice format.
     cust_block = cust_name + (("<br/>" + primary_addr) if primary_addr else "")
 
+    # Always show Bill To row — fall back to the primary address if no
+    # separate billing address is on file, then to "—" if there's nothing.
+    bill_to_value = billing_addr or primary_addr or "—"
+
     left_data = [
         ("Customer", cust_block),
+        ("Bill To", bill_to_value),
+        ("Vehicle", veh),
+        (id_label, ro.get("vin", "—")),
     ]
-    # Show Bill To ONLY when it's set AND different from the primary address.
-    if billing_addr and billing_addr != primary_addr:
-        left_data.append(("Bill To", billing_addr))
-    left_data.append(("Vehicle", veh))
-    left_data.append((id_label, ro.get("vin", "—")))
     if usage_label:
         left_data.append((usage_label, usage_value))
     right_data = [
