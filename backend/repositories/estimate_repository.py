@@ -41,8 +41,12 @@ class EstimateRepository(BaseRepository):
                 SELECT e.*,
                     c.first_name, c.last_name, c.company_name,
                     c.phone_home AS customer_phone, c.email AS customer_email,
+                    c.address AS customer_address, c.city AS customer_city,
+                    c.state AS customer_state, c.zip_code AS customer_zip,
+                    c.billing_address, c.billing_city, c.billing_state, c.billing_zip,
                     v.year AS vehicle_year, v.make AS vehicle_make,
                     v.model AS vehicle_model, v.vin, v.color AS vehicle_color, v.mileage,
+                    v.vehicle_type, v.engine_hours, v.length_feet, v.axle_count,
                     ic.company_name AS insurance_name,
                     emp.first_name AS estimator_first, emp.last_name AS estimator_last
                 FROM estimates e

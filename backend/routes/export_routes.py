@@ -14,10 +14,14 @@ from services.pdf_service import (
     generate_estimate_pdf, generate_invoice_pdf, generate_work_order_pdf
 )
 from services.export_service import ExportService
+from services.repair_order_service import RepairOrderService
+from services.estimate_service import EstimateService
 from config.database import get_db, row_to_dict, rows_to_list
 
 router = APIRouter(prefix="/api/exports", tags=["exports"])
 export_svc = ExportService()
+ro_svc = RepairOrderService()
+est_svc = EstimateService()
 
 
 def _get_shop():
@@ -28,26 +32,16 @@ def _get_shop():
 
 @router.get("/estimate/{estimate_id}/pdf")
 def estimate_pdf(estimate_id: int):
-    """Generate and download an estimate as PDF."""
-    with get_db() as db:
-        est = db.execute("""
-            SELECT e.*, c.first_name AS customer_first, c.last_name AS customer_last,
-                   c.company_name, v.year, v.make, v.model, v.vin, v.color,
-                   ic.company_name AS insurance_name
-            FROM estimates e
-            LEFT JOIN customers c ON e.customer_id = c.id
-            LEFT JOIN vehicles v ON e.vehicle_id = v.id
-            LEFT JOIN insurance_companies ic ON e.insurance_company_id = ic.id
-            WHERE e.id = ?
-        """, (estimate_id,)).fetchone()
-        if not est:
-            raise HTTPException(status_code=404, detail="Estimate not found")
-        est = row_to_dict(est)
+    """Generate and download an estimate as PDF.
 
-        lines = rows_to_list(db.execute(
-            "SELECT * FROM estimate_lines WHERE estimate_id = ? ORDER BY line_number",
-            (estimate_id,)
-        ).fetchall())
+    Same data source as the JSON API (`service.get_estimate`) so any field
+    surfaced in the UI is automatically available in the PDF — including
+    customer address and billing address.
+    """
+    est = est_svc.get_estimate(estimate_id)
+    if not est:
+        raise HTTPException(status_code=404, detail="Estimate not found")
+    lines = est.get("lines") or []
 
     shop = _get_shop()
     buf = generate_estimate_pdf(est, lines, shop)
@@ -61,27 +55,21 @@ def estimate_pdf(estimate_id: int):
 
 @router.get("/ro/{ro_id}/invoice-pdf")
 def invoice_pdf(ro_id: int):
-    """Generate and download an invoice PDF for a repair order."""
-    with get_db() as db:
-        ro = db.execute("""
-            SELECT ro.*, c.first_name AS customer_first, c.last_name AS customer_last,
-                   c.company_name, v.year, v.make, v.model, v.vin, v.color, v.mileage,
-                   ic.company_name AS insurance_name
-            FROM repair_orders ro
-            LEFT JOIN customers c ON ro.customer_id = c.id
-            LEFT JOIN vehicles v ON ro.vehicle_id = v.id
-            LEFT JOIN insurance_companies ic ON ro.insurance_company_id = ic.id
-            WHERE ro.id = ?
-        """, (ro_id,)).fetchone()
-        if not ro:
-            raise HTTPException(status_code=404, detail="Repair order not found")
-        ro = row_to_dict(ro)
+    """Generate and download an invoice PDF for a repair order.
 
+    Uses the SAME data source as the JSON API (`service.get_ro`) so any field
+    we surface in the UI is automatically available in the PDF — including
+    customer address, billing address, vehicle type, etc.
+    """
+    ro = ro_svc.get_ro(ro_id)
+    if not ro:
+        raise HTTPException(status_code=404, detail="Repair order not found")
+
+    with get_db() as db:
         lines = rows_to_list(db.execute(
             "SELECT * FROM ro_lines WHERE ro_id = ? ORDER BY line_number",
             (ro_id,)
         ).fetchall())
-
         payments = rows_to_list(db.execute(
             "SELECT * FROM payments WHERE ro_id = ? ORDER BY payment_date",
             (ro_id,)
@@ -100,23 +88,11 @@ def invoice_pdf(ro_id: int):
 @router.get("/ro/{ro_id}/work-order-pdf")
 def work_order_pdf(ro_id: int):
     """Generate and download a work order PDF for the shop floor."""
-    with get_db() as db:
-        ro = db.execute("""
-            SELECT ro.*, c.first_name AS customer_first, c.last_name AS customer_last,
-                   c.company_name, v.year, v.make, v.model, v.vin, v.color,
-                   t.first_name AS tech_first, t.last_name AS tech_last,
-                   p.first_name AS painter_first, p.last_name AS painter_last
-            FROM repair_orders ro
-            LEFT JOIN customers c ON ro.customer_id = c.id
-            LEFT JOIN vehicles v ON ro.vehicle_id = v.id
-            LEFT JOIN employees t ON ro.technician_id = t.id
-            LEFT JOIN employees p ON ro.painter_id = p.id
-            WHERE ro.id = ?
-        """, (ro_id,)).fetchone()
-        if not ro:
-            raise HTTPException(status_code=404, detail="Repair order not found")
-        ro = row_to_dict(ro)
+    ro = ro_svc.get_ro(ro_id)
+    if not ro:
+        raise HTTPException(status_code=404, detail="Repair order not found")
 
+    with get_db() as db:
         lines = rows_to_list(db.execute(
             "SELECT * FROM ro_lines WHERE ro_id = ? ORDER BY line_number",
             (ro_id,)

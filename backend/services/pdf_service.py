@@ -236,8 +236,7 @@ def generate_estimate_pdf(estimate, lines, shop=None):
 
     # Customer / Vehicle info
     cust_name = estimate.get("company_name") or \
-        f"{estimate.get('customer_first', '')} {estimate.get('customer_last', '')}".strip() or \
-        f"{estimate.get('first_name', '')} {estimate.get('last_name', '')}".strip() or "—"
+        " ".join(x for x in [estimate.get("first_name"), estimate.get("last_name")] if x).strip() or "—"
 
     veh = " ".join(str(x) for x in [
         estimate.get("vehicle_year") or estimate.get("year"),
@@ -245,8 +244,28 @@ def generate_estimate_pdf(estimate, lines, shop=None):
         estimate.get("vehicle_model") or estimate.get("model"),
     ] if x) or "—"
 
+    # Build the customer's primary contact address and (separately) the billing
+    # address. Same logic as the invoice PDF — keep these in sync if you change one.
+    def _clean(v):
+        return (str(v).strip() if v not in (None, "") else "")
+    def _addr(prefix=""):
+        ln1 = _clean(estimate.get(f"{prefix}address"))
+        city = _clean(estimate.get(f"{prefix}city"))
+        state = _clean(estimate.get(f"{prefix}state"))
+        zip_code = _clean(estimate.get(f"{prefix}zip" if prefix else "customer_zip"))
+        ln2_parts = []
+        if city: ln2_parts.append(city)
+        if state or zip_code: ln2_parts.append(" ".join(x for x in [state, zip_code] if x))
+        ln2 = ", ".join(ln2_parts)
+        return "<br/>".join(p for p in [ln1, ln2] if p)
+    primary_addr = _addr("customer_")
+    billing_addr = _addr("billing_")
+    cust_block = cust_name + (("<br/>" + primary_addr) if primary_addr else "")
+    bill_to_value = billing_addr or primary_addr or "—"
+
     left_data = [
-        ("Customer", cust_name),
+        ("Customer", cust_block),
+        ("Bill To", bill_to_value),
         ("Vehicle", veh),
         ("VIN", estimate.get("vin", "—")),
         ("Color", estimate.get("color", "—")),
@@ -442,7 +461,10 @@ def generate_work_order_pdf(ro, lines, shop=None):
     _build_header(story, styles, shop, "WORK ORDER", ro_num,
                   _date(ro.get("create_date") or ro.get("created_at", "")[:10]))
 
-    # Vehicle and assignment info
+    # Customer + vehicle info
+    cust_name = ro.get("company_name") or \
+        " ".join(x for x in [ro.get("first_name"), ro.get("last_name")] if x).strip() or "—"
+
     veh = " ".join(str(x) for x in [
         ro.get("vehicle_year") or ro.get("year"),
         ro.get("vehicle_make") or ro.get("make"),
@@ -450,8 +472,9 @@ def generate_work_order_pdf(ro, lines, shop=None):
     ] if x) or "—"
 
     left_data = [
+        ("Customer", cust_name),
         ("Vehicle", veh),
-        ("Color", ro.get("color", "—")),
+        ("Color", ro.get("color") or ro.get("vehicle_color") or "—"),
         ("VIN", ro.get("vin", "—")),
         ("Priority", (ro.get("priority", "normal") or "normal").title()),
     ]
