@@ -302,9 +302,11 @@ def generate_invoice_pdf(ro, lines, payments=None, shop=None):
 
     _build_header(story, styles, shop, "INVOICE", ro_num, ro_date)
 
-    # Customer / Vehicle info
+    # Customer / Vehicle info — keys come from `c.first_name`/`c.last_name` joined
+    # in get_full, NOT prefixed customer_first/customer_last. Was rendering "—"
+    # for individual (non-company) customers because of the wrong key names.
     cust_name = ro.get("company_name") or \
-        f"{ro.get('customer_first', '')} {ro.get('customer_last', '')}".strip() or "—"
+        " ".join(x for x in [ro.get("first_name"), ro.get("last_name")] if x).strip() or "—"
 
     veh = " ".join(str(x) for x in [
         ro.get("vehicle_year") or ro.get("year"),
@@ -328,8 +330,9 @@ def generate_invoice_pdf(ro, lines, payments=None, shop=None):
         usage_label = "Mileage"
         usage_value = f"{ro['mileage']:,}" if ro.get("mileage") else "Unknown"
 
-    # Bill To address — prefer the billing_* fields on the customer; fall back
-    # to their primary address if no separate billing address is on file.
+    # Build the customer's primary contact address and (separately) the billing
+    # address. Show the primary always; only show Bill To when it actually
+    # differs (no point printing the same address twice).
     def _addr(prefix=""):
         ln1 = ro.get(f"{prefix}address") or ""
         city = ro.get(f"{prefix}city") or ""
@@ -341,14 +344,21 @@ def generate_invoice_pdf(ro, lines, payments=None, shop=None):
         ln2 = ", ".join(ln2_parts)
         # ReportLab Paragraph uses <br/> for line breaks, not \n
         return "<br/>".join(p for p in [ln1, ln2] if p)
-    bill_to_addr = _addr("billing_") or _addr("customer_") or "—"
+    primary_addr = _addr("customer_")
+    billing_addr = _addr("billing_")
+
+    # Pack the primary address right under the name in the same cell so it
+    # reads "Avon Septic / 14 Garden St / Avon, MA 02322" — typical invoice format.
+    cust_block = cust_name + (("<br/>" + primary_addr) if primary_addr else "")
 
     left_data = [
-        ("Customer", cust_name),
-        ("Bill To", bill_to_addr),
-        ("Vehicle", veh),
-        (id_label, ro.get("vin", "—")),
+        ("Customer", cust_block),
     ]
+    # Show Bill To ONLY when it's set AND different from the primary address.
+    if billing_addr and billing_addr != primary_addr:
+        left_data.append(("Bill To", billing_addr))
+    left_data.append(("Vehicle", veh))
+    left_data.append((id_label, ro.get("vin", "—")))
     if usage_label:
         left_data.append((usage_label, usage_value))
     right_data = [
