@@ -152,6 +152,26 @@ class RepairOrderService:
             db.commit()
         self.repo.recalc_totals(ro_id)
 
+    def update_line(self, ro_id: int, line_id: int, data: dict) -> None:
+        """Update fields on an RO line (currently used for toggling taxable) and recompute totals."""
+        from config.database import get_db
+        allowed = {"taxable", "operation", "description", "quantity",
+                   "labor_hours", "labor_rate", "paint_hours", "paint_rate",
+                   "part_price", "part_cost", "notes"}
+        clean = {k: v for k, v in data.items() if k in allowed and v is not None}
+        if "taxable" in clean:
+            clean["taxable"] = 1 if clean["taxable"] else 0
+        if not clean:
+            return
+        with get_db() as db:
+            set_clause = ", ".join(f"{k} = ?" for k in clean)
+            db.execute(
+                f"UPDATE ro_lines SET {set_clause} WHERE id = ? AND ro_id = ?",
+                (*clean.values(), line_id, ro_id),
+            )
+            db.commit()
+        self.repo.recalc_totals(ro_id)
+
     def add_payment(self, ro_id: int, data: dict) -> int:
         """
         Add a payment to a repair order and recalculate totals/balance.

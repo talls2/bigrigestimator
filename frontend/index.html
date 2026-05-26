@@ -1398,6 +1398,13 @@ function EstimateDetail({ id, navigate }) {
         } catch (err) { alert(err.message); }
     };
 
+    const toggleLineTaxable = async (line) => {
+        try {
+            await api(`/estimates/${id}/lines/${line.id}`, { method: 'PATCH', body: { taxable: line.taxable ? 0 : 1 } });
+            load();
+        } catch (err) { alert('Failed to update: ' + (err.message || err)); }
+    };
+
     // Convert flow now opens a modal to require at least one worker.
     const [showConvertModal, setShowConvertModal] = useState(false);
     const [convertTeam, setConvertTeam] = useState([{employee_id:'', role:''}]);
@@ -1684,7 +1691,18 @@ function EstimateDetail({ id, navigate }) {
                             <td>{l.labor_hours || l.paint_hours || '—'}</td>
                             <td>{l.labor_rate || l.paint_rate || '—'}</td>
                             <td className="money">{l.part_price ? fmt(l.part_price * (l.quantity||1)) : '—'}</td>
-                            <td style={{textAlign:'center'}}>{l.taxable ? <i className="fas fa-check text-green" title="Taxable"></i> : <span className="text-muted" title="Not taxable">—</span>}</td>
+                            <td style={{textAlign:'center'}}>
+                                {est.status !== 'converted' ? (
+                                    <button onClick={(e) => { e.stopPropagation(); toggleLineTaxable(l); }}
+                                            title={l.taxable ? 'Taxable — click to remove' : 'Not taxable — click to mark taxable'}
+                                            disabled={!!est.tax_exempt}
+                                            style={{background:'transparent', border:`1px solid ${l.taxable ? 'var(--primary)' : 'var(--border)'}`,
+                                                    borderRadius:4, cursor: est.tax_exempt ? 'not-allowed' : 'pointer', padding:'2px 8px',
+                                                    color: l.taxable ? 'var(--primary)' : 'var(--text-muted)', opacity: est.tax_exempt ? 0.4 : 1}}>
+                                        {l.taxable ? <i className="fas fa-check"></i> : '—'}
+                                    </button>
+                                ) : (l.taxable ? <i className="fas fa-check text-green"></i> : <span className="text-muted">—</span>)}
+                            </td>
                             <td className="money" style={{fontWeight:600}}>{fmt(l.line_total)}</td>
                             {est.status !== 'converted' && (
                                 <td><button className="btn btn-outline btn-sm" style={{color:'var(--red)', borderColor:'var(--red)', padding:'4px 8px'}}
@@ -1713,6 +1731,12 @@ function EstimateDetail({ id, navigate }) {
                                 {est.tax_exempt ? <span className="text-muted" style={{fontSize:13, fontWeight:500}}>EXEMPT</span> : fmt(est.tax_amount)}
                             </span>
                         </div>
+                        {!est.tax_exempt && !est.tax_amount && (est.lines||[]).length > 0 && !(est.lines||[]).some(l => l.taxable) && (
+                            <div className="text-sm text-muted" style={{padding:'4px 0 8px', fontStyle:'italic'}}>
+                                <i className="fas fa-info-circle" style={{marginRight:4}}></i>
+                                No lines marked taxable. Click the <b>Tax</b> column on a line to make it taxable.
+                            </div>
+                        )}
                         <div className="detail-row" style={{borderTop:'2px solid var(--primary)', paddingTop:8}}>
                             <span className="detail-label" style={{fontWeight:700,fontSize:15}}>Total</span>
                             <span className="detail-value money" style={{fontSize:18,color:'var(--primary)'}}>{fmt(est.total_amount)}</span>
@@ -2013,6 +2037,13 @@ function RODetail({ id, navigate }) {
         } catch (err) { alert('Failed to delete line: ' + (err.message || err)); }
     };
 
+    const toggleLineTaxable = async (line) => {
+        try {
+            await api(`/repair-orders/${id}/lines/${line.id}`, { method: 'PATCH', body: { taxable: line.taxable ? 0 : 1 } });
+            load();
+        } catch (err) { alert('Failed to update: ' + (err.message || err)); }
+    };
+
     // Suggest the common shop roles plus any roles already used on this RO
     const roleSuggestions = Array.from(new Set([
         'estimator','technician','painter','body tech','helper','detailer','parts',
@@ -2291,7 +2322,18 @@ function RODetail({ id, navigate }) {
                                 <td>{l.description}</td><td className="text-sm">{l.part_number||'—'}</td>
                                 <td>{l.quantity}</td><td>{l.labor_hours||l.paint_hours||'—'}</td><td>{l.labor_rate||l.paint_rate||'—'}</td>
                                 <td className="money">{l.part_price ? fmt(l.part_price):'—'}</td>
-                                <td style={{textAlign:'center'}}>{l.taxable ? <i className="fas fa-check text-green" title="Taxable"></i> : <span className="text-muted" title="Not taxable">—</span>}</td>
+                                <td style={{textAlign:'center'}}>
+                                    {(ro.status !== 'closed' && ro.status !== 'delivered') ? (
+                                        <button onClick={(e) => { e.stopPropagation(); toggleLineTaxable(l); }}
+                                                title={l.taxable ? 'Taxable — click to remove' : 'Not taxable — click to mark taxable'}
+                                                disabled={!!ro.tax_exempt}
+                                                style={{background:'transparent', border:`1px solid ${l.taxable ? 'var(--primary)' : 'var(--border)'}`,
+                                                        borderRadius:4, cursor: ro.tax_exempt ? 'not-allowed' : 'pointer', padding:'2px 8px',
+                                                        color: l.taxable ? 'var(--primary)' : 'var(--text-muted)', opacity: ro.tax_exempt ? 0.4 : 1}}>
+                                            {l.taxable ? <i className="fas fa-check"></i> : '—'}
+                                        </button>
+                                    ) : (l.taxable ? <i className="fas fa-check text-green"></i> : <span className="text-muted">—</span>)}
+                                </td>
                                 <td><Badge status={l.status}/></td>
                                 <td className="money" style={{fontWeight:600}}>{fmt(l.line_total)}</td>
                                 {ro.status !== 'closed' && ro.status !== 'delivered' && (
@@ -2321,6 +2363,12 @@ function RODetail({ id, navigate }) {
                                     {ro.tax_exempt ? <span className="text-muted" style={{fontSize:13, fontWeight:500}}>EXEMPT</span> : fmt(ro.tax_amount)}
                                 </span>
                             </div>
+                            {!ro.tax_exempt && !ro.tax_amount && (ro.lines||[]).length > 0 && !(ro.lines||[]).some(l => l.taxable) && (
+                                <div className="text-sm text-muted" style={{padding:'4px 0 8px', fontStyle:'italic'}}>
+                                    <i className="fas fa-info-circle" style={{marginRight:4}}></i>
+                                    No lines marked taxable. Click the <b>Tax</b> column on a line to make it taxable.
+                                </div>
+                            )}
                             <div className="detail-row" style={{borderTop:'2px solid var(--border)'}}><span className="detail-label" style={{fontWeight:700}}>Total</span><span className="detail-value money" style={{fontSize:16}}>{fmt(ro.total_amount)}</span></div>
                             <div className="detail-row"><span className="detail-label">Paid</span><span className="detail-value money text-green">{fmt(ro.amount_paid)}</span></div>
                             <div className="detail-row" style={{borderTop:'2px solid var(--primary)'}}><span className="detail-label" style={{fontWeight:700,fontSize:15}}>Balance Due</span><span className="detail-value money" style={{fontSize:18,color: ro.balance_due > 0 ? 'var(--red)':'var(--green)'}}>{fmt(ro.balance_due)}</span></div>

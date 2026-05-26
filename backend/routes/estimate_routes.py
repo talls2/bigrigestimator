@@ -123,6 +123,32 @@ def delete_estimate_line(estimate_id: int, line_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class EstLineUpdate(BaseModel):
+    taxable: Optional[int] = None
+    operation: Optional[str] = None
+    description: Optional[str] = None
+    quantity: Optional[float] = None
+    labor_hours: Optional[float] = None
+    labor_rate: Optional[float] = None
+    paint_hours: Optional[float] = None
+    paint_rate: Optional[float] = None
+    part_price: Optional[float] = None
+    part_cost: Optional[float] = None
+    notes: Optional[str] = None
+
+
+@router.patch("/{estimate_id}/lines/{line_id}")
+def update_estimate_line(estimate_id: int, line_id: int, data: EstLineUpdate):
+    """Update fields on an estimate line (e.g. flip taxable) and recompute totals."""
+    try:
+        service.update_line(estimate_id, line_id, data.dict(exclude_unset=True))
+        return {"id": line_id, "message": "Line updated"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class TeamMember(BaseModel):
     employee_id: int
     role: str

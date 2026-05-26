@@ -143,6 +143,32 @@ def delete_repair_order_line(ro_id: int, line_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class RoLineUpdate(BaseModel):
+    taxable: Optional[int] = None
+    operation: Optional[str] = None
+    description: Optional[str] = None
+    quantity: Optional[float] = None
+    labor_hours: Optional[float] = None
+    labor_rate: Optional[float] = None
+    paint_hours: Optional[float] = None
+    paint_rate: Optional[float] = None
+    part_price: Optional[float] = None
+    part_cost: Optional[float] = None
+    notes: Optional[str] = None
+
+
+@router.patch("/{ro_id}/lines/{line_id}")
+def update_repair_order_line(ro_id: int, line_id: int, data: RoLineUpdate):
+    """Update fields on an RO line (e.g. flip taxable on/off) and recompute totals."""
+    try:
+        service.update_line(ro_id, line_id, data.dict(exclude_unset=True))
+        return {"id": line_id, "message": "Line updated"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/{ro_id}/payments")
 def add_repair_order_payment(ro_id: int, data: PaymentIn):
     """Add a payment to a repair order."""

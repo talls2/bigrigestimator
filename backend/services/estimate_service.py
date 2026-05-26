@@ -139,6 +139,30 @@ class EstimateService:
         # Recalculate totals
         self.estimate_repo.recalc_totals(estimate_id)
 
+    def update_line(self, estimate_id: int, line_id: int, data: dict) -> None:
+        """Update fields on an estimate line and recompute totals."""
+        existing = self.estimate_repo.get_by_id(estimate_id)
+        if not existing:
+            raise ValueError(f"Estimate {estimate_id} not found")
+        from config.database import get_db
+        allowed = {"taxable", "operation", "description", "quantity",
+                   "labor_hours", "labor_rate", "paint_hours", "paint_rate",
+                   "part_price", "part_cost", "notes"}
+        clean = {k: v for k, v in data.items() if k in allowed and v is not None}
+        if "taxable" in clean:
+            clean["taxable"] = 1 if clean["taxable"] else 0
+        if not clean:
+            return
+        with get_db() as db:
+            set_clause = ", ".join(f"{k} = ?" for k in clean)
+            db.execute(
+                f"UPDATE estimate_lines SET {set_clause} WHERE id = ? AND estimate_id = ?",
+                (*clean.values(), line_id, estimate_id),
+            )
+            db.commit()
+
+        self.estimate_repo.recalc_totals(estimate_id)
+
     def convert_to_ro(self, estimate_id: int, team: list[dict] | None = None) -> int:
         """
         Convert an estimate to a repair order.
