@@ -413,17 +413,22 @@ function VehicleFormFields({ form, set }) {
 }
 
 // Build a clean POST/PUT body from the form state, dropping UI-only fields
-// and converting numerics. Returns a plain object ready for the API.
+// and converting numerics. Empty strings → null so Pydantic Optional[int]
+// validators don't reject them.
 function buildVehicleBody(form) {
     const body = {...form};
-    // UI-only state — strip
     delete body.mileage_unknown;
-    // Numerics
-    if (body.year) body.year = parseInt(body.year);
-    body.mileage      = (form.mileage_unknown || !body.mileage)      ? null : parseInt(body.mileage);
+    // Numeric fields — empty string must become null, not stay as ''
+    body.year         = body.year         ? parseInt(body.year)         : null;
+    body.mileage      = (form.mileage_unknown || !body.mileage)         ? null : parseInt(body.mileage);
     body.engine_hours = body.engine_hours ? parseInt(body.engine_hours) : null;
     body.length_feet  = body.length_feet  ? parseInt(body.length_feet)  : null;
     body.axle_count   = body.axle_count   ? parseInt(body.axle_count)   : null;
+    // Optional text fields — empty string → null
+    ['vin','make','model','submodel','color','license_plate','license_state','notes','vehicle_type']
+        .forEach(k => { if (body[k] === '') body[k] = null; });
+    // vehicle_type defaults to 'tractor' if blanked
+    if (!body.vehicle_type) body.vehicle_type = 'tractor';
     return body;
 }
 
@@ -650,9 +655,13 @@ function CustomerDetail({ id, navigate }) {
     useEffect(() => { load(); }, [id]);
 
     const saveVehicle = async () => {
-        const body = {...buildVehicleBody(vehForm), customer_id: parseInt(id)};
-        await api('/vehicles', { method: 'POST', body });
-        setShowVehForm(false); setVehForm(emptyVeh); load();
+        try {
+            const body = {...buildVehicleBody(vehForm), customer_id: parseInt(id)};
+            await api('/vehicles', { method: 'POST', body });
+            setShowVehForm(false); setVehForm(emptyVeh); load();
+        } catch (err) {
+            alert('Failed to save vehicle: ' + (err.message || err));
+        }
     };
 
     const openEditCustomer = () => {
@@ -849,9 +858,13 @@ function VehiclesPage({ navigate }) {
     useEffect(() => { if (showForm) api('/customers').then(setCustomers); }, [showForm]);
 
     const save = async () => {
-        const body = buildVehicleBody(form);
-        await api('/vehicles', { method: 'POST', body });
-        setShowForm(false); setForm(emptyVeh); load();
+        try {
+            const body = buildVehicleBody(form);
+            await api('/vehicles', { method: 'POST', body });
+            setShowForm(false); setForm(emptyVeh); load();
+        } catch (err) {
+            alert('Failed to save vehicle: ' + (err.message || err));
+        }
     };
 
     return (
@@ -920,6 +933,7 @@ function VehicleDetail({ id, navigate }) {
 
     const save = async () => {
         if (!form.customer_id) { alert('Please select an owner'); return; }
+        try {
         const body = {
             ...buildVehicleBody(form),
             customer_id: parseInt(form.customer_id),
@@ -927,6 +941,9 @@ function VehicleDetail({ id, navigate }) {
         };
         await api(`/vehicles/${id}`, { method: 'PUT', body });
         setEditing(false); load();
+        } catch (err) {
+            alert('Failed to save vehicle: ' + (err.message || err));
+        }
     };
 
     const filteredCustomers = customers.filter(c => {
