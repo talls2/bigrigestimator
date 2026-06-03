@@ -172,6 +172,36 @@ class EstimateService:
             db.commit()
         self.estimate_repo.recalc_totals(estimate_id)
 
+    def delete_estimate(self, estimate_id: int) -> None:
+        """
+        Delete an estimate.
+
+        Refuses if the estimate has been converted to a Repair Order (deleting
+        would orphan the RO's reference). Cascades to estimate_lines via FK.
+
+        Raises:
+            ValueError: If the estimate doesn't exist, was converted, or has
+                        any RO referencing it.
+        """
+        existing = self.estimate_repo.get_by_id(estimate_id)
+        if not existing:
+            raise ValueError(f"Estimate {estimate_id} not found")
+
+        from config.database import get_db
+        with get_db() as db:
+            ros = db.execute(
+                "SELECT COUNT(*) AS n FROM repair_orders WHERE estimate_id = ?",
+                (estimate_id,),
+            ).fetchone()["n"]
+            if ros:
+                raise ValueError(
+                    f"Cannot delete this estimate — it has been converted to "
+                    f"{ros} repair order(s). Delete the RO first if you really "
+                    f"want to remove the estimate."
+                )
+            db.execute("DELETE FROM estimates WHERE id = ?", (estimate_id,))
+            db.commit()
+
     def move_line(self, estimate_id: int, line_id: int, direction: str) -> None:
         """Swap a line's line_number with its neighbor (up or down)."""
         if direction not in ("up", "down"):

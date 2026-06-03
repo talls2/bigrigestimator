@@ -1029,12 +1029,22 @@ function EstimatesPage({ navigate }) {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
 
-    useEffect(() => {
+    const load = () => {
         let q = '/estimates?';
         if (search) q += `search=${search}&`;
         if (statusFilter) q += `status=${statusFilter}`;
         api(q).then(setEstimates);
-    }, [search, statusFilter]);
+    };
+    useEffect(() => { load(); }, [search, statusFilter]);
+
+    const deleteEstimate = async (est, ev) => {
+        ev.stopPropagation();
+        if (!confirm(`Delete estimate ${est.estimate_number}? This can't be undone.`)) return;
+        try {
+            await api(`/estimates/${est.id}`, { method: 'DELETE' });
+            load();
+        } catch (err) { alert(err.message || 'Delete failed'); }
+    };
 
     return (
         <div>
@@ -1051,7 +1061,7 @@ function EstimatesPage({ navigate }) {
                 </select>
             </div>
             <div className="card"><div className="table-wrapper">
-                <table><thead><tr><th>Estimate #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Loss Date</th><th>Total</th></tr></thead>
+                <table><thead><tr><th>Estimate #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Loss Date</th><th>Total</th><th style={{width:50}}></th></tr></thead>
                 <tbody>
                 {estimates.map(e => (
                     <tr key={e.id} className="clickable" onClick={() => navigate('est-detail', e.id)}>
@@ -1061,6 +1071,14 @@ function EstimatesPage({ navigate }) {
                         <td><Badge status={e.status} /></td>
                         <td>{fmtDate(e.loss_date)}</td>
                         <td className="money">{fmt(e.total_amount)}</td>
+                        <td style={{textAlign:'right'}}>
+                            {e.status !== 'converted' && (
+                                <button className="btn btn-outline btn-sm" onClick={(ev) => deleteEstimate(e, ev)} title="Delete estimate"
+                                        style={{color:'var(--danger)', borderColor:'var(--danger)', padding:'4px 8px'}}>
+                                    <i className="fas fa-trash"></i>
+                                </button>
+                            )}
+                        </td>
                     </tr>
                 ))}
                 </tbody></table>
@@ -1450,6 +1468,14 @@ function EstimateDetail({ id, navigate }) {
         } catch (err) { alert('Failed to move: ' + (err.message || err)); }
     };
 
+    const deleteEstimate = async () => {
+        if (!confirm(`Delete estimate ${est?.estimate_number}? This can't be undone.`)) return;
+        try {
+            await api(`/estimates/${id}`, { method: 'DELETE' });
+            navigate('estimates');
+        } catch (err) { alert(err.message || 'Delete failed'); }
+    };
+
     const [editingLine, setEditingLine] = useState(null);
     const openEditLine = (line) => setEditingLine({...line});
     const saveLineEdit = async () => {
@@ -1539,6 +1565,12 @@ function EstimateDetail({ id, navigate }) {
                     <a href={`${API}/exports/estimate/${id}/pdf`} target="_blank" className="btn btn-outline"><i className="fas fa-file-pdf"></i> Print PDF</a>
                     {est.status !== 'converted' && (
                         <button className="btn btn-success" onClick={openConvertModal}><i className="fas fa-arrow-right"></i> Convert to RO</button>
+                    )}
+                    {est.status !== 'converted' && (
+                        <button className="btn btn-outline" onClick={deleteEstimate}
+                                style={{color:'var(--danger)', borderColor:'var(--danger)'}} title="Delete this estimate">
+                            <i className="fas fa-trash"></i> Delete
+                        </button>
                     )}
                 </div>
             </div>

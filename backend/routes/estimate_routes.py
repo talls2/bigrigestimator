@@ -161,6 +161,18 @@ def move_estimate_line(estimate_id: int, line_id: int, direction: str = Query(..
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/{estimate_id}")
+def delete_estimate(estimate_id: int):
+    """Delete an estimate. Refuses if it's been converted to an RO."""
+    try:
+        service.delete_estimate(estimate_id)
+        return {"message": "Estimate deleted"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class TeamMember(BaseModel):
     employee_id: int
     role: str
