@@ -1443,6 +1443,38 @@ function EstimateDetail({ id, navigate }) {
         } catch (err) { alert('Failed to update: ' + (err.message || err)); }
     };
 
+    const moveLine = async (lineId, direction) => {
+        try {
+            await api(`/estimates/${id}/lines/${lineId}/move?direction=${direction}`, { method: 'POST' });
+            load();
+        } catch (err) { alert('Failed to move: ' + (err.message || err)); }
+    };
+
+    const [editingLine, setEditingLine] = useState(null);
+    const openEditLine = (line) => setEditingLine({...line});
+    const saveLineEdit = async () => {
+        if (!editingLine) return;
+        try {
+            const body = {
+                operation: editingLine.operation || null,
+                description: editingLine.description,
+                part_number: editingLine.part_number || null,
+                part_type: editingLine.part_type || null,
+                quantity: parseFloat(editingLine.quantity) || 1,
+                labor_hours: parseFloat(editingLine.labor_hours) || 0,
+                labor_rate: parseFloat(editingLine.labor_rate) || 0,
+                paint_hours: parseFloat(editingLine.paint_hours) || 0,
+                paint_rate: parseFloat(editingLine.paint_rate) || 0,
+                part_price: parseFloat(editingLine.part_price) || 0,
+                part_cost: parseFloat(editingLine.part_cost) || 0,
+                notes: editingLine.notes || null,
+            };
+            await api(`/estimates/${id}/lines/${editingLine.id}`, { method: 'PATCH', body });
+            setEditingLine(null);
+            load();
+        } catch (err) { alert('Failed to save: ' + (err.message || err)); }
+    };
+
     // Convert flow now opens a modal to require at least one worker.
     const [showConvertModal, setShowConvertModal] = useState(false);
     const [convertTeam, setConvertTeam] = useState([{employee_id:'', role:''}]);
@@ -1743,8 +1775,18 @@ function EstimateDetail({ id, navigate }) {
                             </td>
                             <td className="money" style={{fontWeight:600}}>{fmt(l.line_total)}</td>
                             {est.status !== 'converted' && (
-                                <td><button className="btn btn-outline btn-sm" style={{color:'var(--red)', borderColor:'var(--red)', padding:'4px 8px'}}
-                                        onClick={() => deleteLine(l.id)} title="Delete line"><i className="fas fa-trash"></i></button></td>
+                                <td style={{whiteSpace:'nowrap', textAlign:'right'}}>
+                                    <button className="btn btn-outline btn-sm" onClick={() => moveLine(l.id, 'up')} title="Move up"
+                                            disabled={(est.lines||[])[0]?.id === l.id}
+                                            style={{padding:'4px 6px', marginRight:2}}><i className="fas fa-arrow-up"></i></button>
+                                    <button className="btn btn-outline btn-sm" onClick={() => moveLine(l.id, 'down')} title="Move down"
+                                            disabled={(est.lines||[]).slice(-1)[0]?.id === l.id}
+                                            style={{padding:'4px 6px', marginRight:4}}><i className="fas fa-arrow-down"></i></button>
+                                    <button className="btn btn-outline btn-sm" onClick={() => openEditLine(l)} title="Edit line"
+                                            style={{padding:'4px 8px', marginRight:4}}><i className="fas fa-edit"></i></button>
+                                    <button className="btn btn-outline btn-sm" onClick={() => deleteLine(l.id)} title="Delete line"
+                                            style={{color:'var(--red)', borderColor:'var(--red)', padding:'4px 8px'}}><i className="fas fa-trash"></i></button>
+                                </td>
                             )}
                         </tr>
                     ))}
@@ -1782,6 +1824,58 @@ function EstimateDetail({ id, navigate }) {
                     </div>
                 </div>
             </div>
+
+            {/* ── Edit existing line ── */}
+            <Modal open={!!editingLine} onClose={() => setEditingLine(null)} title={`Edit Line ${editingLine?.line_number || ''}`}>
+                {editingLine && (() => {
+                    const lt = editingLine.line_type;
+                    const setF = (k, v) => setEditingLine({...editingLine, [k]: v});
+                    return (
+                        <div>
+                            <div className="text-sm text-muted" style={{marginBottom:10}}>Type: <b>{lt}</b></div>
+                            <div className="form-group" style={{marginBottom:10}}>
+                                <label>Description</label>
+                                <input value={editingLine.description||''} onChange={e => setF('description', e.target.value)} />
+                            </div>
+                            <div className="form-grid">
+                                <div className="form-group"><label>Operation</label><input value={editingLine.operation||''} onChange={e => setF('operation', e.target.value)} /></div>
+                                {lt === 'labor' && <>
+                                    <div className="form-group"><label>Hours</label><input type="number" step="0.1" value={editingLine.labor_hours||0} onChange={e => setF('labor_hours', e.target.value)} /></div>
+                                    <div className="form-group"><label>Rate $/hr</label><input type="number" step="0.01" value={editingLine.labor_rate||0} onChange={e => setF('labor_rate', e.target.value)} /></div>
+                                </>}
+                                {(lt === 'paint' || lt === 'refinish') && <>
+                                    <div className="form-group"><label>Hours</label><input type="number" step="0.1" value={editingLine.paint_hours||0} onChange={e => setF('paint_hours', e.target.value)} /></div>
+                                    <div className="form-group"><label>Rate $/hr</label><input type="number" step="0.01" value={editingLine.paint_rate||0} onChange={e => setF('paint_rate', e.target.value)} /></div>
+                                </>}
+                                {lt === 'part' && <>
+                                    <div className="form-group"><label>Part #</label><input value={editingLine.part_number||''} onChange={e => setF('part_number', e.target.value)} /></div>
+                                    <div className="form-group"><label>Type</label>
+                                        <select value={editingLine.part_type||'OEM'} onChange={e => setF('part_type', e.target.value)}>
+                                            <option value="OEM">OEM</option><option value="aftermarket">Aftermarket</option>
+                                            <option value="used">Used</option><option value="reconditioned">Reconditioned</option>
+                                            <option value="remanufactured">Reman</option>
+                                        </select>
+                                    </div>
+                                    <div className="form-group"><label>Qty</label><input type="number" step="1" value={editingLine.quantity||1} onChange={e => setF('quantity', e.target.value)} /></div>
+                                    <div className="form-group"><label>Price each</label><input type="number" step="0.01" value={editingLine.part_price||0} onChange={e => setF('part_price', e.target.value)} /></div>
+                                    <div className="form-group"><label>Cost each</label><input type="number" step="0.01" value={editingLine.part_cost||0} onChange={e => setF('part_cost', e.target.value)} /></div>
+                                </>}
+                                {(lt === 'sublet' || lt === 'other') && (
+                                    <div className="form-group"><label>Amount</label><input type="number" step="0.01" value={editingLine.part_price||0} onChange={e => setF('part_price', e.target.value)} /></div>
+                                )}
+                            </div>
+                            <div className="form-group" style={{marginTop:10}}>
+                                <label>Notes</label>
+                                <textarea value={editingLine.notes||''} onChange={e => setF('notes', e.target.value)} />
+                            </div>
+                            <div className="modal-actions">
+                                <button className="btn btn-outline" onClick={() => setEditingLine(null)}>Cancel</button>
+                                <button className="btn btn-primary" onClick={saveLineEdit}><i className="fas fa-save"></i> Save</button>
+                            </div>
+                        </div>
+                    );
+                })()}
+            </Modal>
 
             {/* ── Convert to RO: pick at least one worker ── */}
             <Modal open={showConvertModal} onClose={() => setShowConvertModal(false)} title="Convert to Repair Order">
@@ -2082,6 +2176,38 @@ function RODetail({ id, navigate }) {
         } catch (err) { alert('Failed to update: ' + (err.message || err)); }
     };
 
+    const moveLine = async (lineId, direction) => {
+        try {
+            await api(`/repair-orders/${id}/lines/${lineId}/move?direction=${direction}`, { method: 'POST' });
+            load();
+        } catch (err) { alert('Failed to move: ' + (err.message || err)); }
+    };
+
+    const [editingLine, setEditingLine] = useState(null);  // {...line} or null
+    const openEditLine = (line) => setEditingLine({...line});
+    const saveLineEdit = async () => {
+        if (!editingLine) return;
+        try {
+            const body = {
+                operation: editingLine.operation || null,
+                description: editingLine.description,
+                part_number: editingLine.part_number || null,
+                part_type: editingLine.part_type || null,
+                quantity: parseFloat(editingLine.quantity) || 1,
+                labor_hours: parseFloat(editingLine.labor_hours) || 0,
+                labor_rate: parseFloat(editingLine.labor_rate) || 0,
+                paint_hours: parseFloat(editingLine.paint_hours) || 0,
+                paint_rate: parseFloat(editingLine.paint_rate) || 0,
+                part_price: parseFloat(editingLine.part_price) || 0,
+                part_cost: parseFloat(editingLine.part_cost) || 0,
+                notes: editingLine.notes || null,
+            };
+            await api(`/repair-orders/${id}/lines/${editingLine.id}`, { method: 'PATCH', body });
+            setEditingLine(null);
+            load();
+        } catch (err) { alert('Failed to save: ' + (err.message || err)); }
+    };
+
     // Suggest the common shop roles plus any roles already used on this RO
     const roleSuggestions = Array.from(new Set([
         'estimator','technician','painter','body tech','helper','detailer','parts',
@@ -2375,8 +2501,18 @@ function RODetail({ id, navigate }) {
                                 <td><Badge status={l.status}/></td>
                                 <td className="money" style={{fontWeight:600}}>{fmt(l.line_total)}</td>
                                 {ro.status !== 'closed' && ro.status !== 'delivered' && (
-                                    <td><button className="btn btn-outline btn-sm" onClick={() => deleteLine(l.id)} title="Delete line"
-                                            style={{color:'var(--danger)', borderColor:'var(--danger)', padding:'4px 8px'}}><i className="fas fa-trash"></i></button></td>
+                                    <td style={{whiteSpace:'nowrap', textAlign:'right'}}>
+                                        <button className="btn btn-outline btn-sm" onClick={() => moveLine(l.id, 'up')} title="Move up"
+                                                disabled={(ro.lines||[])[0]?.id === l.id}
+                                                style={{padding:'4px 6px', marginRight:2}}><i className="fas fa-arrow-up"></i></button>
+                                        <button className="btn btn-outline btn-sm" onClick={() => moveLine(l.id, 'down')} title="Move down"
+                                                disabled={(ro.lines||[]).slice(-1)[0]?.id === l.id}
+                                                style={{padding:'4px 6px', marginRight:4}}><i className="fas fa-arrow-down"></i></button>
+                                        <button className="btn btn-outline btn-sm" onClick={() => openEditLine(l)} title="Edit line"
+                                                style={{padding:'4px 8px', marginRight:4}}><i className="fas fa-edit"></i></button>
+                                        <button className="btn btn-outline btn-sm" onClick={() => deleteLine(l.id)} title="Delete line"
+                                                style={{color:'var(--danger)', borderColor:'var(--danger)', padding:'4px 8px'}}><i className="fas fa-trash"></i></button>
+                                    </td>
                                 )}
                             </tr>
                         ))}
@@ -2592,6 +2728,62 @@ function RODetail({ id, navigate }) {
                                 <button className="btn btn-warning" onClick={confirmAddLine} disabled={lineSaving}>
                                     <i className="fas fa-plus"></i> Add Supplement Line
                                 </button>
+                            </div>
+                        </div>
+                    );
+                })()}
+            </Modal>
+
+            {/* ── Edit existing line ── */}
+            <Modal open={!!editingLine} onClose={() => setEditingLine(null)} title={`Edit Line ${editingLine?.line_number || ''}`}>
+                {editingLine && (() => {
+                    const lt = editingLine.line_type;
+                    const setF = (k, v) => setEditingLine({...editingLine, [k]: v});
+                    return (
+                        <div>
+                            <div className="text-sm text-muted" style={{marginBottom:10}}>
+                                Type: <b>{lt}</b> {editingLine.is_supplement ? <span style={{color:'#eab308'}}> (supplement #{editingLine.supplement_number||1})</span> : ''}
+                            </div>
+                            <div className="form-group" style={{marginBottom:10}}>
+                                <label>Description</label>
+                                <input value={editingLine.description||''} onChange={e => setF('description', e.target.value)} />
+                            </div>
+                            <div className="form-grid">
+                                <div className="form-group"><label>Operation</label>
+                                    <input value={editingLine.operation||''} onChange={e => setF('operation', e.target.value)} placeholder="e.g. repair" />
+                                </div>
+                                {lt === 'labor' && <>
+                                    <div className="form-group"><label>Hours</label><input type="number" step="0.1" value={editingLine.labor_hours||0} onChange={e => setF('labor_hours', e.target.value)} /></div>
+                                    <div className="form-group"><label>Rate $/hr</label><input type="number" step="0.01" value={editingLine.labor_rate||0} onChange={e => setF('labor_rate', e.target.value)} /></div>
+                                </>}
+                                {(lt === 'paint' || lt === 'refinish') && <>
+                                    <div className="form-group"><label>Hours</label><input type="number" step="0.1" value={editingLine.paint_hours||0} onChange={e => setF('paint_hours', e.target.value)} /></div>
+                                    <div className="form-group"><label>Rate $/hr</label><input type="number" step="0.01" value={editingLine.paint_rate||0} onChange={e => setF('paint_rate', e.target.value)} /></div>
+                                </>}
+                                {lt === 'part' && <>
+                                    <div className="form-group"><label>Part #</label><input value={editingLine.part_number||''} onChange={e => setF('part_number', e.target.value)} /></div>
+                                    <div className="form-group"><label>Type</label>
+                                        <select value={editingLine.part_type||'OEM'} onChange={e => setF('part_type', e.target.value)}>
+                                            <option value="OEM">OEM</option><option value="aftermarket">Aftermarket</option>
+                                            <option value="used">Used</option><option value="reconditioned">Reconditioned</option>
+                                            <option value="remanufactured">Reman</option>
+                                        </select>
+                                    </div>
+                                    <div className="form-group"><label>Qty</label><input type="number" step="1" value={editingLine.quantity||1} onChange={e => setF('quantity', e.target.value)} /></div>
+                                    <div className="form-group"><label>Price each</label><input type="number" step="0.01" value={editingLine.part_price||0} onChange={e => setF('part_price', e.target.value)} /></div>
+                                    <div className="form-group"><label>Cost each</label><input type="number" step="0.01" value={editingLine.part_cost||0} onChange={e => setF('part_cost', e.target.value)} /></div>
+                                </>}
+                                {(lt === 'sublet' || lt === 'other') && (
+                                    <div className="form-group"><label>Amount</label><input type="number" step="0.01" value={editingLine.part_price||0} onChange={e => setF('part_price', e.target.value)} /></div>
+                                )}
+                            </div>
+                            <div className="form-group" style={{marginTop:10}}>
+                                <label>Notes</label>
+                                <textarea value={editingLine.notes||''} onChange={e => setF('notes', e.target.value)} />
+                            </div>
+                            <div className="modal-actions">
+                                <button className="btn btn-outline" onClick={() => setEditingLine(null)}>Cancel</button>
+                                <button className="btn btn-primary" onClick={saveLineEdit}><i className="fas fa-save"></i> Save</button>
                             </div>
                         </div>
                     );

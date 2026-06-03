@@ -153,10 +153,10 @@ class RepairOrderService:
         self.repo.recalc_totals(ro_id)
 
     def update_line(self, ro_id: int, line_id: int, data: dict) -> None:
-        """Update fields on an RO line (currently used for toggling taxable) and recompute totals."""
+        """Update fields on an RO line, recompute its line_total, and refresh document totals."""
         from config.database import get_db
-        allowed = {"taxable", "operation", "description", "quantity",
-                   "labor_hours", "labor_rate", "paint_hours", "paint_rate",
+        allowed = {"taxable", "operation", "description", "part_number", "part_type",
+                   "quantity", "labor_hours", "labor_rate", "paint_hours", "paint_rate",
                    "part_price", "part_cost", "notes"}
         clean = {k: v for k, v in data.items() if k in allowed and v is not None}
         if "taxable" in clean:
@@ -164,13 +164,49 @@ class RepairOrderService:
         if not clean:
             return
         with get_db() as db:
+            # Apply the field updates
             set_clause = ", ".join(f"{k} = ?" for k in clean)
             db.execute(
                 f"UPDATE ro_lines SET {set_clause} WHERE id = ? AND ro_id = ?",
                 (*clean.values(), line_id, ro_id),
             )
+            # Recompute this line's line_total from its current values
+            row = db.execute("SELECT * FROM ro_lines WHERE id = ?", (line_id,)).fetchone()
+            if row:
+                lh = float(row["labor_hours"] or 0)
+                lr = float(row["labor_rate"] or 0)
+                ph = float(row["paint_hours"] or 0)
+                pr = float(row["paint_rate"] or 0)
+                pp = float(row["part_price"] or 0)
+                qty = float(row["quantity"] or 1)
+                line_total = round((lh * lr) + (ph * pr) + (pp * qty), 2)
+                db.execute("UPDATE ro_lines SET line_total = ? WHERE id = ?", (line_total, line_id))
             db.commit()
         self.repo.recalc_totals(ro_id)
+
+    def move_line(self, ro_id: int, line_id: int, direction: str) -> None:
+        """Swap a line's line_number with its neighbor (up or down)."""
+        if direction not in ("up", "down"):
+            raise ValueError("direction must be 'up' or 'down'")
+        from config.database import get_db
+        with get_db() as db:
+            rows = db.execute(
+                "SELECT id, line_number FROM ro_lines WHERE ro_id = ? ORDER BY line_number",
+                (ro_id,),
+            ).fetchall()
+            ids = [r["id"] for r in rows]
+            nums = [r["line_number"] for r in rows]
+            if line_id not in ids:
+                raise ValueError(f"Line {line_id} not on RO {ro_id}")
+            idx = ids.index(line_id)
+            target = idx - 1 if direction == "up" else idx + 1
+            if target < 0 or target >= len(ids):
+                return  # already at the end — no-op
+            # Swap line_numbers between idx and target. SQLite is happy because
+            # there's no unique constraint on (ro_id, line_number).
+            db.execute("UPDATE ro_lines SET line_number = ? WHERE id = ?", (nums[target], ids[idx]))
+            db.execute("UPDATE ro_lines SET line_number = ? WHERE id = ?", (nums[idx], ids[target]))
+            db.commit()
 
     def add_payment(self, ro_id: int, data: dict) -> int:
         """

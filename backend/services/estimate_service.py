@@ -140,13 +140,13 @@ class EstimateService:
         self.estimate_repo.recalc_totals(estimate_id)
 
     def update_line(self, estimate_id: int, line_id: int, data: dict) -> None:
-        """Update fields on an estimate line and recompute totals."""
+        """Update fields on an estimate line, recompute line_total, refresh document."""
         existing = self.estimate_repo.get_by_id(estimate_id)
         if not existing:
             raise ValueError(f"Estimate {estimate_id} not found")
         from config.database import get_db
-        allowed = {"taxable", "operation", "description", "quantity",
-                   "labor_hours", "labor_rate", "paint_hours", "paint_rate",
+        allowed = {"taxable", "operation", "description", "part_number", "part_type",
+                   "quantity", "labor_hours", "labor_rate", "paint_hours", "paint_rate",
                    "part_price", "part_cost", "notes"}
         clean = {k: v for k, v in data.items() if k in allowed and v is not None}
         if "taxable" in clean:
@@ -159,9 +159,40 @@ class EstimateService:
                 f"UPDATE estimate_lines SET {set_clause} WHERE id = ? AND estimate_id = ?",
                 (*clean.values(), line_id, estimate_id),
             )
+            row = db.execute("SELECT * FROM estimate_lines WHERE id = ?", (line_id,)).fetchone()
+            if row:
+                lh = float(row["labor_hours"] or 0)
+                lr = float(row["labor_rate"] or 0)
+                ph = float(row["paint_hours"] or 0)
+                pr = float(row["paint_rate"] or 0)
+                pp = float(row["part_price"] or 0)
+                qty = float(row["quantity"] or 1)
+                line_total = round((lh * lr) + (ph * pr) + (pp * qty), 2)
+                db.execute("UPDATE estimate_lines SET line_total = ? WHERE id = ?", (line_total, line_id))
             db.commit()
-
         self.estimate_repo.recalc_totals(estimate_id)
+
+    def move_line(self, estimate_id: int, line_id: int, direction: str) -> None:
+        """Swap a line's line_number with its neighbor (up or down)."""
+        if direction not in ("up", "down"):
+            raise ValueError("direction must be 'up' or 'down'")
+        from config.database import get_db
+        with get_db() as db:
+            rows = db.execute(
+                "SELECT id, line_number FROM estimate_lines WHERE estimate_id = ? ORDER BY line_number",
+                (estimate_id,),
+            ).fetchall()
+            ids = [r["id"] for r in rows]
+            nums = [r["line_number"] for r in rows]
+            if line_id not in ids:
+                raise ValueError(f"Line {line_id} not on estimate {estimate_id}")
+            idx = ids.index(line_id)
+            target = idx - 1 if direction == "up" else idx + 1
+            if target < 0 or target >= len(ids):
+                return
+            db.execute("UPDATE estimate_lines SET line_number = ? WHERE id = ?", (nums[target], ids[idx]))
+            db.execute("UPDATE estimate_lines SET line_number = ? WHERE id = ?", (nums[idx], ids[target]))
+            db.commit()
 
     def convert_to_ro(self, estimate_id: int, team: list[dict] | None = None) -> int:
         """

@@ -149,6 +149,18 @@ def update_estimate_line(estimate_id: int, line_id: int, data: EstLineUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/{estimate_id}/lines/{line_id}/move")
+def move_estimate_line(estimate_id: int, line_id: int, direction: str = Query(..., regex="^(up|down)$")):
+    """Reorder a line — swap line_number with the neighbor up or down."""
+    try:
+        service.move_line(estimate_id, line_id, direction)
+        return {"id": line_id, "message": f"Line moved {direction}"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class TeamMember(BaseModel):
     employee_id: int
     role: str

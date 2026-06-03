@@ -169,6 +169,18 @@ def update_repair_order_line(ro_id: int, line_id: int, data: RoLineUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/{ro_id}/lines/{line_id}/move")
+def move_repair_order_line(ro_id: int, line_id: int, direction: str = Query(..., regex="^(up|down)$")):
+    """Reorder a line — swap line_number with the neighbor up or down."""
+    try:
+        service.move_line(ro_id, line_id, direction)
+        return {"id": line_id, "message": f"Line moved {direction}"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/{ro_id}/payments")
 def add_repair_order_payment(ro_id: int, data: PaymentIn):
     """Add a payment to a repair order."""
