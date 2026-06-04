@@ -7,8 +7,14 @@ GET /api/exports/quickbooks - QuickBooks IIF export
 GET /api/exports/xml - Generic XML export
 GET /api/exports/mitchell-connect - Mitchell Connect XML export
 """
+import io
+import sqlite3
+import os
+import tempfile
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi import BackgroundTasks
 from typing import Optional
 from services.pdf_service import (
     generate_estimate_pdf, generate_invoice_pdf, generate_work_order_pdf
@@ -16,7 +22,9 @@ from services.pdf_service import (
 from services.export_service import ExportService
 from services.repair_order_service import RepairOrderService
 from services.estimate_service import EstimateService
-from config.database import get_db, row_to_dict, rows_to_list
+from config.database import get_db, row_to_dict, rows_to_list, DB_PATH
+from routes.auth_routes import require_admin
+from fastapi import Request
 
 router = APIRouter(prefix="/api/exports", tags=["exports"])
 export_svc = ExportService()
@@ -261,4 +269,46 @@ def estimates_csv_export(date_from: Optional[str] = Query(None),
     )
 
 
-import io
+@router.get("/db-backup")
+def db_backup(request: Request, background_tasks: BackgroundTasks):
+    """
+    Admin-only: stream a clean SQLite snapshot of the entire shop database.
+
+    Uses SQLite's online backup API (Connection.backup) so the snapshot is
+    transactionally consistent even while the app is being written to — no
+    downtime or risk of corruption. Writes to a temp file, streams it, then
+    deletes the temp via a background task.
+    """
+    require_admin(request)
+
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+    fd, tmp_path = tempfile.mkstemp(prefix=f"shop_backup_{timestamp}_", suffix=".db")
+    os.close(fd)
+    try:
+        src = sqlite3.connect(DB_PATH)
+        dst = sqlite3.connect(tmp_path)
+        with dst:
+            src.backup(dst)
+        dst.close()
+        src.close()
+    except Exception as e:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise HTTPException(status_code=500, detail=f"Backup failed: {e}")
+
+    filename = f"shop_backup_{timestamp}.db"
+    background_tasks.add_task(_safe_remove, tmp_path)
+    return FileResponse(
+        tmp_path,
+        media_type="application/x-sqlite3",
+        filename=filename,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _safe_remove(path: str) -> None:
+    try:
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass

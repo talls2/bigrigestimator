@@ -170,7 +170,7 @@ def update_repair_order_line(ro_id: int, line_id: int, data: RoLineUpdate):
 
 
 @router.post("/{ro_id}/lines/{line_id}/move")
-def move_repair_order_line(ro_id: int, line_id: int, direction: str = Query(..., regex="^(up|down)$")):
+def move_repair_order_line(ro_id: int, line_id: int, direction: str = Query(..., pattern="^(up|down)$")):
     """Reorder a line — swap line_number with the neighbor up or down."""
     try:
         service.move_line(ro_id, line_id, direction)

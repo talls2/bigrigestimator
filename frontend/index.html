@@ -3599,7 +3599,7 @@ function ReportsPage() {
 // ═══════════════════════════════════════════════════════════
 // SETTINGS
 // ═══════════════════════════════════════════════════════════
-function SettingsPage() {
+function SettingsPage({ user }) {
     const [info, setInfo] = useState(null);
     const [rates, setRates] = useState([]);
     const [showAddRate, setShowAddRate] = useState(false);
@@ -3737,6 +3737,52 @@ function SettingsPage() {
                     <a href={`${API}/exports/mitchell-connect`} className="btn btn-warning" download><i className="fas fa-exchange-alt"></i> Mitchell Connect XML</a>
                 </div>
             </div>
+
+            {user && user.role === 'admin' && (
+                <div className="card">
+                    <div className="section-title"><i className="fas fa-shield-alt"></i> Database Backup (Admin)</div>
+                    <p style={{fontSize: 13, color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.5}}>
+                        Download a complete snapshot of every customer, vehicle, RO, estimate, payment,
+                        time card, and parts catalog entry — as a single SQLite <code>.db</code> file.
+                        Safe to run anytime; the snapshot is consistent even if work is in progress.
+                        Keep a copy off Railway (Dropbox, Google Drive, external drive) for disaster recovery.
+                    </p>
+                    <div className="text-sm text-muted" style={{marginBottom:12, padding:10, background:'var(--bg)', borderRadius:6}}>
+                        <i className="fas fa-info-circle" style={{marginRight:6}}></i>
+                        The downloaded file can be opened with <b>DB Browser for SQLite</b> (free) to inspect rows,
+                        or sent back to me to debug data issues. <b>Don't share it publicly</b> — it contains every
+                        customer name, address, phone, payment record, and worker PIN hash.
+                    </div>
+                    <button className="btn btn-primary" onClick={async () => {
+                        try {
+                            const resp = await fetch(`${API}/exports/db-backup`, {
+                                headers: _authToken ? { Authorization: `Bearer ${_authToken}` } : {},
+                            });
+                            if (!resp.ok) {
+                                const err = await resp.json().catch(() => ({}));
+                                throw new Error(err.detail || `HTTP ${resp.status}`);
+                            }
+                            // Pull filename out of Content-Disposition header if present
+                            const cd = resp.headers.get('Content-Disposition') || '';
+                            const m = cd.match(/filename="?([^"]+)"?/);
+                            const filename = m ? m[1] : 'shop_backup.db';
+                            const blob = await resp.blob();
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = filename;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                        } catch (err) {
+                            alert('Backup download failed: ' + (err.message || err));
+                        }
+                    }}>
+                        <i className="fas fa-download"></i> Download DB Backup
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
@@ -4472,7 +4518,7 @@ function AdminView({ user, onLogout }) {
         case 'vendors': content = <VendorsPage navigate={navigate} />; break;
         case 'production': content = <ProductionPage navigate={navigate} />; break;
         case 'reports': content = <ReportsPage />; break;
-        case 'settings': content = <SettingsPage />; break;
+        case 'settings': content = <SettingsPage user={user} />; break;
         case 'users': content = <UsersPage user={user} />; break;
         default: content = <Dashboard navigate={navigate} />;
     }
