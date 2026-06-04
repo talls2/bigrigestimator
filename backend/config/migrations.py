@@ -327,6 +327,10 @@ def run_migrations(conn) -> None:
     _add_column(conn, "customers", "billing_state",   "TEXT")
     _add_column(conn, "customers", "billing_zip",     "TEXT")
 
+    # Migration 003f: customer signature capture on ROs. Stores a base64-encoded
+    # PNG of the customer's signature for work authorization.
+    _add_column(conn, "repair_orders", "customer_signature", "TEXT")
+
     # Migration 003c: ro_assignments join table for multi-worker assignment.
     # CREATE IF NOT EXISTS already handles fresh installs via TABLES, but on
     # a live DB we also back-fill from the legacy fixed columns the first time.

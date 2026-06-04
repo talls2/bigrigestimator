@@ -447,6 +447,106 @@ function Modal({ open, onClose, title, children }) {
     );
 }
 
+// Touch-friendly signature pad. Returns a base64 PNG via onSave(dataUrl).
+// Pre-fills with an existing signature if provided.
+function SignaturePad({ onSave, onCancel, existing }) {
+    const canvasRef = React.useRef(null);
+    const drawingRef = React.useRef(false);
+    const lastPosRef = React.useRef({x:0, y:0});
+    const [hasInk, setHasInk] = useState(!!existing);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        // Make canvas match its display size for crisp drawing on HiDPI screens
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(dpr, dpr);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        if (existing) {
+            const img = new Image();
+            img.onload = () => ctx.drawImage(img, 0, 0, rect.width, rect.height);
+            img.src = existing;
+        }
+    }, []);
+
+    const getPos = (e) => {
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const t = e.touches && e.touches[0] ? e.touches[0] : e;
+        return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+    };
+
+    const start = (e) => {
+        e.preventDefault();
+        drawingRef.current = true;
+        lastPosRef.current = getPos(e);
+    };
+    const move = (e) => {
+        if (!drawingRef.current) return;
+        e.preventDefault();
+        const ctx = canvasRef.current.getContext('2d');
+        const p = getPos(e);
+        ctx.beginPath();
+        ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        lastPosRef.current = p;
+        setHasInk(true);
+    };
+    const end = () => { drawingRef.current = false; };
+
+    const clear = () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const dpr = window.devicePixelRatio || 1;
+        ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+        setHasInk(false);
+    };
+
+    const save = () => {
+        const dataUrl = canvasRef.current.toDataURL('image/png');
+        onSave(dataUrl);
+    };
+
+    return (
+        <div>
+            <div style={{padding:10, background:'rgba(77,184,106,0.06)', borderLeft:'3px solid var(--primary)', borderRadius:6, marginBottom:12, fontSize:13}}>
+                <i className="fas fa-info-circle" style={{marginRight:6, color:'var(--primary)'}}></i>
+                Have the customer sign below to authorize work. Touch screen or use a mouse. They can re-sign by clicking Clear.
+            </div>
+            <div style={{position:'relative', background:'white', border:'2px solid var(--border)', borderRadius:6}}>
+                <canvas
+                    ref={canvasRef}
+                    style={{width:'100%', height:200, display:'block', cursor:'crosshair', touchAction:'none'}}
+                    onMouseDown={start} onMouseMove={move} onMouseUp={end} onMouseLeave={end}
+                    onTouchStart={start} onTouchMove={move} onTouchEnd={end}
+                />
+                <div style={{position:'absolute', bottom:8, left:12, right:12, borderTop:'1px solid #999', textAlign:'center', fontSize:11, color:'#999', pointerEvents:'none'}}>
+                    <span style={{background:'white', padding:'0 8px', position:'relative', top:-7}}>Customer Signature</span>
+                </div>
+            </div>
+            <div className="modal-actions" style={{justifyContent:'space-between'}}>
+                <button className="btn btn-outline" onClick={clear} type="button">
+                    <i className="fas fa-eraser"></i> Clear
+                </button>
+                <div style={{display:'flex', gap:8}}>
+                    <button className="btn btn-outline" onClick={onCancel} type="button">Cancel</button>
+                    <button className="btn btn-primary" onClick={save} disabled={!hasInk}>
+                        <i className="fas fa-check"></i> Save Signature
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ═══════════════════════════════════════════════════════════
 // SIDEBAR
 // ═══════════════════════════════════════════════════════════
@@ -2066,6 +2166,7 @@ function RODetail({ id, navigate }) {
         quantity: 1, labor_hours: 0, labor_rate: 0, paint_hours: 0, paint_rate: 0, part_price: 0, part_cost: 0, taxable: false, notes: '' });
     const [lineSaving, setLineSaving] = useState(false);
     const [editingLine, setEditingLine] = useState(null);  // {...line} or null
+    const [showSignaturePad, setShowSignaturePad] = useState(false);
 
     const load = () => api(`/repair-orders/${id}`).then(setRo);
     const loadTeam = () => api(`/repair-orders/${id}/team`).then(setTeam).catch(() => setTeam([]));
@@ -2216,6 +2317,31 @@ function RODetail({ id, navigate }) {
         } catch (err) { alert('Failed to move: ' + (err.message || err)); }
     };
 
+    const saveSignature = async (dataUrl) => {
+        try {
+            const today = new Date().toISOString().slice(0, 10);
+            await api(`/repair-orders/${id}`, { method: 'PUT', body: {
+                customer_id: ro.customer_id,
+                customer_signature: dataUrl,
+                customer_signature_date: today,
+            }});
+            setShowSignaturePad(false);
+            load();
+        } catch (err) { alert('Failed to save signature: ' + (err.message || err)); }
+    };
+
+    const clearSignature = async () => {
+        if (!confirm('Remove the saved signature?')) return;
+        try {
+            await api(`/repair-orders/${id}`, { method: 'PUT', body: {
+                customer_id: ro.customer_id,
+                customer_signature: null,
+                customer_signature_date: null,
+            }});
+            load();
+        } catch (err) { alert('Failed: ' + (err.message || err)); }
+    };
+
     const openEditLine = (line) => setEditingLine({...line});
     const saveLineEdit = async () => {
         if (!editingLine) return;
@@ -2346,6 +2472,40 @@ function RODetail({ id, navigate }) {
                     {!(ro.insurance_name || ro.claim_number || ro.deductible > 0) && (
                         <div className="text-muted" style={{padding:8, fontSize:13}}>Customer pay — no insurance on file.</div>
                     )}
+
+                    <div style={{marginTop:14, paddingTop:14, borderTop:'1px solid var(--border)'}}>
+                        <div className="section-title" style={{margin:0, marginBottom:8, fontSize:13}}><i className="fas fa-signature"></i> Work Authorization</div>
+                        {ro.customer_signature ? (
+                            <div>
+                                <div style={{padding:8, background:'white', border:'1px solid var(--border)', borderRadius:6, marginBottom:8}}>
+                                    <img src={ro.customer_signature} alt="Customer signature" style={{maxWidth:'100%', height:80, objectFit:'contain', display:'block', margin:'0 auto'}} />
+                                </div>
+                                <div className="text-sm text-muted" style={{marginBottom:8}}>
+                                    <i className="fas fa-check-circle text-green" style={{marginRight:4}}></i>
+                                    Signed {ro.customer_signature_date ? fmtDate(ro.customer_signature_date) : ''}
+                                </div>
+                                <div style={{display:'flex', gap:6}}>
+                                    <button className="btn btn-outline btn-sm" onClick={() => setShowSignaturePad(true)}>
+                                        <i className="fas fa-pen"></i> Re-sign
+                                    </button>
+                                    <button className="btn btn-outline btn-sm" onClick={clearSignature}
+                                            style={{color:'var(--danger)', borderColor:'var(--danger)'}}>
+                                        <i className="fas fa-times"></i> Clear
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div>
+                                <div className="text-sm text-muted" style={{marginBottom:8}}>
+                                    <i className="fas fa-exclamation-circle" style={{color:'#eab308', marginRight:4}}></i>
+                                    No signature on file yet.
+                                </div>
+                                <button className="btn btn-primary btn-sm" onClick={() => setShowSignaturePad(true)}>
+                                    <i className="fas fa-signature"></i> Capture Signature
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -2711,6 +2871,16 @@ function RODetail({ id, navigate }) {
                     <div className="form-group"><label>Payer Name</label><input value={payForm.payer_name} onChange={e => setPayForm({...payForm, payer_name: e.target.value})} /></div>
                 </div>
                 <div className="modal-actions"><button className="btn btn-outline" onClick={() => setShowPayment(false)}>Cancel</button><button className="btn btn-success" onClick={addPayment}><i className="fas fa-check"></i> Record Payment</button></div>
+            </Modal>
+
+            {/* ── Signature pad ── */}
+            <Modal open={showSignaturePad} onClose={() => setShowSignaturePad(false)} title="Customer Work Authorization">
+                {showSignaturePad && (
+                    <SignaturePad
+                        existing={ro.customer_signature}
+                        onSave={saveSignature}
+                        onCancel={() => setShowSignaturePad(false)} />
+                )}
             </Modal>
 
             {/* ── Supplement warning before adding a line to an RO ── */}

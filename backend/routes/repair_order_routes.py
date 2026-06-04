@@ -29,6 +29,8 @@ class RepairOrderIn(BaseModel):
     priority: str = "normal"
     loss_date: Optional[str] = None
     tax_exempt: Optional[int] = None
+    customer_signature: Optional[str] = None
+    customer_signature_date: Optional[str] = None
     notes: Optional[str] = None
 
 

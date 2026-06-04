@@ -91,6 +91,42 @@ def _build_header(story, styles, shop, doc_type, doc_number, date_str):
     story.append(Spacer(1, 12))
 
 
+def _build_signature_block(story, styles, ro):
+    """
+    Render the work-authorization signature area. If ro has a customer_signature
+    (a base64-encoded PNG data URL), embed the image. Otherwise leave the
+    classic blank sign-here line for paper signing.
+    """
+    import base64
+    sig_data_url = ro.get("customer_signature") or ""
+    sig_date = ro.get("customer_signature_date") or ""
+
+    if sig_data_url and sig_data_url.startswith("data:image"):
+        try:
+            _, b64 = sig_data_url.split(",", 1)
+            raw = base64.b64decode(b64)
+            img = Image(io.BytesIO(raw), width=2.5 * inch, height=0.9 * inch)
+            sig_label = Paragraph("<b>Customer Signature:</b>", styles["Normal"])
+            date_str = _date(sig_date) if sig_date else ""
+            date_cell = Paragraph(f"<b>Date:</b> {date_str}" if date_str else "<b>Date:</b> ________________", styles["Normal"])
+            t = Table([[sig_label, img, date_cell]], colWidths=[110, 200, 180])
+            t.setStyle(TableStyle([
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("VALIGN", (0, 0), (-1, -1), "BOTTOM"),
+                ("LINEBELOW", (1, 0), (1, 0), 0.5, colors.HexColor("#94a3b8")),
+            ]))
+            story.append(t)
+            return
+        except Exception:
+            pass  # fall through to blank line on any image decoding issue
+
+    # No signature on file — keep the classic paper-signing line.
+    sig_data = [["Customer Signature: ______________________________", "", "Date: ________________"]]
+    t = Table(sig_data, colWidths=[250, 40, 200])
+    t.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 9)]))
+    story.append(t)
+
+
 def _build_info_table(story, styles, left_data, right_data):
     """Build a two-column info section (customer/vehicle or insurance info)."""
     left_rows = [[Paragraph(f"<b>{k}:</b>", styles["Normal"]),
@@ -426,15 +462,10 @@ def generate_invoice_pdf(ro, lines, payments=None, shop=None):
         ]))
         story.append(t)
 
-    # Signature lines
+    # Signature block — if a customer signature is on file, embed the image.
+    # Otherwise show the blank "sign here" line for on-paper signing.
     story.append(Spacer(1, 30))
-    sig_data = [
-        ["Customer Signature: ______________________________", "",
-         "Date: ________________"],
-    ]
-    sig = Table(sig_data, colWidths=[250, 40, 200])
-    sig.setStyle(TableStyle([("FONTSIZE", (0, 0), (-1, -1), 9)]))
-    story.append(sig)
+    _build_signature_block(story, styles, ro)
 
     # Footer
     story.append(Spacer(1, 16))

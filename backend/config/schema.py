@@ -220,6 +220,7 @@ TABLES = [
         scheduled_in_date TEXT,
         vehicle_arrived_date TEXT,
         customer_signature_date TEXT,
+        customer_signature TEXT,
         repair_start_date TEXT,
         internal_target_date TEXT,
         target_delivery_date TEXT,
