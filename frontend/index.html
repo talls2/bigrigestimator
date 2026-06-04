@@ -2065,6 +2065,7 @@ function RODetail({ id, navigate }) {
     const [lineForm, setLineForm] = useState({ line_type: 'labor', operation: '', description: '', part_number: '', part_type: 'OEM',
         quantity: 1, labor_hours: 0, labor_rate: 0, paint_hours: 0, paint_rate: 0, part_price: 0, part_cost: 0, taxable: false, notes: '' });
     const [lineSaving, setLineSaving] = useState(false);
+    const [editingLine, setEditingLine] = useState(null);  // {...line} or null
 
     const load = () => api(`/repair-orders/${id}`).then(setRo);
     const loadTeam = () => api(`/repair-orders/${id}/team`).then(setTeam).catch(() => setTeam([]));
@@ -2215,7 +2216,6 @@ function RODetail({ id, navigate }) {
         } catch (err) { alert('Failed to move: ' + (err.message || err)); }
     };
 
-    const [editingLine, setEditingLine] = useState(null);  // {...line} or null
     const openEditLine = (line) => setEditingLine({...line});
     const saveLineEdit = async () => {
         if (!editingLine) return;
