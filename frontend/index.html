@@ -2815,14 +2815,13 @@ function RODetail({ id, navigate }) {
 
                 return (
                     <div>
-                        {/* Allocate-time button */}
-                        {ro.status !== 'closed' && ro.status !== 'delivered' && (
-                            <div style={{marginBottom: 12, textAlign:'right'}}>
-                                <button className="btn btn-primary" onClick={() => setShowAllocateTime(true)}>
-                                    <i className="fas fa-plus"></i> Allocate Worker Hours to this RO
-                                </button>
-                            </div>
-                        )}
+                        {/* Allocate-time button — visible on any RO so secretary can
+                            retroactively log hours even on Completed/Delivered/Closed jobs */}
+                        <div style={{marginBottom: 12, textAlign:'right'}}>
+                            <button className="btn btn-primary" onClick={() => setShowAllocateTime(true)}>
+                                <i className="fas fa-plus"></i> Allocate Worker Hours to this RO
+                            </button>
+                        </div>
                         {/* Summary cards */}
                         <div className="card" style={{marginBottom:16, padding:16, background:'rgba(77,184,106,0.06)', borderLeft:'3px solid var(--primary)'}}>
                             <div style={{display:'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap:16}}>
