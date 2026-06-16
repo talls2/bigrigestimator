@@ -2167,6 +2167,8 @@ function RODetail({ id, navigate }) {
     const [lineSaving, setLineSaving] = useState(false);
     const [editingLine, setEditingLine] = useState(null);  // {...line} or null
     const [showSignaturePad, setShowSignaturePad] = useState(false);
+    const [showAllocateTime, setShowAllocateTime] = useState(false);
+    const [allocForm, setAllocForm] = useState({employee_id:'', work_date: new Date().toISOString().slice(0,10), hours:'', notes:''});
 
     const load = () => api(`/repair-orders/${id}`).then(setRo);
     const loadTeam = () => api(`/repair-orders/${id}/team`).then(setTeam).catch(() => setTeam([]));
@@ -2340,6 +2342,35 @@ function RODetail({ id, navigate }) {
             }});
             load();
         } catch (err) { alert('Failed: ' + (err.message || err)); }
+    };
+
+    // Office time allocation — secretary records how many hours a worker spent
+    // on this RO. Saved as a closed (clock_in + clock_out) time card so the
+    // existing summary view picks it up immediately.
+    const saveAllocation = async () => {
+        const hrs = parseFloat(allocForm.hours);
+        if (!allocForm.employee_id) return alert('Pick a worker.');
+        if (!hrs || hrs <= 0) return alert('Enter the hours (must be greater than 0).');
+        if (!allocForm.work_date) return alert('Pick a date.');
+        // Synthesize a closed time card. Use 9:00 AM local on the work date as
+        // a placeholder clock_in; clock_out = clock_in + hours. Server still
+        // accepts both clock_in and clock_out as full ISO with Z.
+        const start = new Date(allocForm.work_date + 'T09:00:00');
+        const end = new Date(start.getTime() + hrs * 3600 * 1000);
+        try {
+            await api('/time-cards', { method: 'POST', body: {
+                employee_id: parseInt(allocForm.employee_id),
+                ro_id: parseInt(id),
+                clock_in: start.toISOString(),
+                clock_out: end.toISOString(),
+                hours_worked: hrs,
+                activity_type: 'production',
+                notes: allocForm.notes || null,
+            }});
+            setShowAllocateTime(false);
+            setAllocForm({employee_id:'', work_date: new Date().toISOString().slice(0,10), hours:'', notes:''});
+            load();
+        } catch (err) { alert('Failed to allocate: ' + (err.message || err)); }
     };
 
     const openEditLine = (line) => setEditingLine({...line});
@@ -2784,6 +2815,14 @@ function RODetail({ id, navigate }) {
 
                 return (
                     <div>
+                        {/* Allocate-time button */}
+                        {ro.status !== 'closed' && ro.status !== 'delivered' && (
+                            <div style={{marginBottom: 12, textAlign:'right'}}>
+                                <button className="btn btn-primary" onClick={() => setShowAllocateTime(true)}>
+                                    <i className="fas fa-plus"></i> Allocate Worker Hours to this RO
+                                </button>
+                            </div>
+                        )}
                         {/* Summary cards */}
                         <div className="card" style={{marginBottom:16, padding:16, background:'rgba(77,184,106,0.06)', borderLeft:'3px solid var(--primary)'}}>
                             <div style={{display:'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap:16}}>
@@ -2881,6 +2920,48 @@ function RODetail({ id, navigate }) {
                         onSave={saveSignature}
                         onCancel={() => setShowSignaturePad(false)} />
                 )}
+            </Modal>
+
+            {/* ── Allocate worker hours to this RO ── */}
+            <Modal open={showAllocateTime} onClose={() => setShowAllocateTime(false)} title="Allocate Worker Hours to this RO">
+                <div style={{padding:12, background:'rgba(77,184,106,0.06)', borderLeft:'3px solid var(--primary)', borderRadius:6, marginBottom:14, fontSize:13, lineHeight:1.5}}>
+                    <i className="fas fa-info-circle" style={{marginRight:6, color:'var(--primary)'}}></i>
+                    Use this at end of day to record how many hours each worker spent on this specific RO,
+                    based on what they tell you. This adds to the running total on this RO without affecting
+                    their general daily clock-in.
+                </div>
+                <div className="form-grid">
+                    <div className="form-group">
+                        <label>Worker <span style={{color:'var(--danger)'}}>*</span></label>
+                        <select value={allocForm.employee_id} onChange={e => setAllocForm({...allocForm, employee_id: e.target.value})}>
+                            <option value="">— Select worker —</option>
+                            {employees.filter(e => e.is_active).map(e => (
+                                <option key={e.id} value={e.id}>{e.first_name} {e.last_name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label>Date</label>
+                        <input type="date" value={allocForm.work_date} onChange={e => setAllocForm({...allocForm, work_date: e.target.value})} />
+                    </div>
+                    <div className="form-group">
+                        <label>Hours on this RO <span style={{color:'var(--danger)'}}>*</span></label>
+                        <input type="number" step="0.25" min="0" value={allocForm.hours}
+                               onChange={e => setAllocForm({...allocForm, hours: e.target.value})}
+                               placeholder="e.g. 3.5" autoFocus />
+                    </div>
+                </div>
+                <div className="form-group" style={{marginTop:12}}>
+                    <label>Notes (optional)</label>
+                    <textarea value={allocForm.notes} onChange={e => setAllocForm({...allocForm, notes: e.target.value})}
+                              placeholder="e.g. Body work on driver door, prep + paint" />
+                </div>
+                <div className="modal-actions">
+                    <button className="btn btn-outline" onClick={() => setShowAllocateTime(false)}>Cancel</button>
+                    <button className="btn btn-primary" onClick={saveAllocation}>
+                        <i className="fas fa-save"></i> Save Allocation
+                    </button>
+                </div>
             </Modal>
 
             {/* ── Supplement warning before adding a line to an RO ── */}
@@ -4149,7 +4230,6 @@ function TimeClock({ user, onLogout }) {
     const [todayHours, setTodayHours] = useState(0);
     const [activeRoId, setActiveRoId] = useState(null);
     const [activeRoNumber, setActiveRoNumber] = useState(null);
-    const [myJobs, setMyJobs] = useState([]);
     const [busy, setBusy] = useState(false);
     const [confirmation, setConfirmation] = useState(null);  // {type:'in'|'out', label, hours?}
     const [logoutCountdown, setLogoutCountdown] = useState(null);
@@ -4191,20 +4271,6 @@ function TimeClock({ user, onLogout }) {
     };
 
     useEffect(() => { refreshState(); }, [user.employee_id]);
-
-    useEffect(() => {
-        if (!user.employee_id) return;
-        const fetchJobs = () => {
-            api(`/repair-orders?assigned_to=${user.employee_id}`).then(ros => {
-                const active = ros.filter(r => ['open','in_progress'].includes(r.status));
-                setMyJobs(active);
-            }).catch(() => {});
-        };
-        fetchJobs();
-        // Auto-refresh so newly assigned ROs show up mid-shift without re-login.
-        const t = setInterval(fetchJobs, 30000);
-        return () => clearInterval(t);
-    }, [user.employee_id]);
 
     // Show a brief success screen, then auto-logout so the next worker can use the
     // terminal. Mimics the Mitchell TecStation kiosk flow.
@@ -4326,21 +4392,18 @@ function TimeClock({ user, onLogout }) {
         );
     }
 
-    // ═══ CLOCKED-IN VIEW: big timer + clock-out for the active job ═══
+    // ═══ CLOCKED-IN VIEW: big timer + clock-out ═══
     if (clockedIn) {
-        const jobLabel = activeRoNumber ? `RO ${activeRoNumber}` : 'general work';
         return (
-            <div style={{textAlign: 'center', padding: '16px 0'}}>
-                <div style={{fontSize: 16, color: '#22c55e', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 8}}>
+            <div style={{textAlign: 'center', padding: '24px 0'}}>
+                <div style={{fontSize: 16, color: '#22c55e', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 16}}>
                     <i className="fas fa-circle" style={{fontSize: 12, marginRight: 8, animation: 'pulse 2s infinite'}}></i> Clocked In
                 </div>
-                <div style={{fontSize: 18, color: 'var(--text-muted)', marginBottom: 8}}>Working on</div>
-                <div style={{fontSize: 28, fontWeight: 700, color: 'var(--primary)', marginBottom: 16}}>{jobLabel}</div>
-                <div style={{fontSize: 72, fontWeight: 800, fontFamily: 'monospace', color: '#fff', letterSpacing: 4, margin: '8px 0 24px'}}>
+                <div style={{fontSize: 72, fontWeight: 800, fontFamily: 'monospace', color: '#fff', letterSpacing: 4, margin: '8px 0 32px'}}>
                     {elapsedStr}
                 </div>
-                <button className="touch-btn touch-btn-danger" onClick={handleClockOut} disabled={busy} style={{minWidth: 320, fontSize: 22, padding: '20px 32px'}}>
-                    <i className="fas fa-stop"></i> {busy ? 'Working…' : `Clock Out of ${jobLabel}`}
+                <button className="touch-btn touch-btn-danger" onClick={handleClockOut} disabled={busy} style={{minWidth: 320, fontSize: 26, padding: '24px 48px'}}>
+                    <i className="fas fa-stop"></i> {busy ? 'Working…' : 'Clock Out'}
                 </button>
                 <div style={{marginTop: 32, padding: '16px 24px', background: 'var(--bg-card)', borderRadius: 12, display: 'inline-block', border: '1px solid var(--border)'}}>
                     <div style={{fontSize: 14, color: 'var(--text-muted)', marginBottom: 4}}>Today's Total</div>
@@ -4352,59 +4415,26 @@ function TimeClock({ user, onLogout }) {
         );
     }
 
-    // ═══ CLOCKED-OUT VIEW: jobs-first picker ═══
+    // ═══ CLOCKED-OUT VIEW: single big Clock In button (no per-job picker) ═══
     return (
-        <div style={{padding: '16px 0'}}>
-            <div style={{textAlign: 'center', marginBottom: 24}}>
-                <div style={{fontSize: 16, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2}}>
-                    <i className="far fa-circle" style={{fontSize: 12, marginRight: 8}}></i> Not Clocked In
-                </div>
-                <div style={{fontSize: 14, color: 'var(--text-muted)', marginTop: 8}}>
-                    Pick a job below to start the clock.
-                </div>
+        <div style={{padding: '32px 0', textAlign: 'center'}}>
+            <div style={{fontSize: 16, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 16}}>
+                <i className="far fa-circle" style={{fontSize: 12, marginRight: 8}}></i> Not Clocked In
+            </div>
+            <div style={{fontSize: 14, color: 'var(--text-muted)', marginBottom: 32, maxWidth: 480, margin: '0 auto 32px'}}>
+                Just clock in for the day. At the end of your shift, tell the office
+                how many hours you spent on each job.
             </div>
 
-            {myJobs.length > 0 ? (
-                <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12, maxWidth: 900, margin: '0 auto'}}>
-                    {myJobs.map(job => (
-                        <button key={job.id} className="touch-btn touch-btn-success"
-                                onClick={() => handleClockIn(job.id, `RO ${job.ro_number}`)} disabled={busy}
-                                style={{padding: '20px 16px', textAlign: 'left', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6}}>
-                            <div style={{fontSize: 14, opacity: 0.85, textTransform: 'uppercase', letterSpacing: 1}}>
-                                <i className="fas fa-play" style={{marginRight: 8}}></i> Clock In
-                            </div>
-                            <div style={{fontSize: 22, fontWeight: 700}}>RO {job.ro_number}</div>
-                            <div style={{fontSize: 13, opacity: 0.85}}>{custName(job)}</div>
-                            <div style={{fontSize: 13, opacity: 0.7}}>{vehDesc(job)}</div>
-                        </button>
-                    ))}
-                </div>
-            ) : (
-                <div style={{textAlign: 'center', padding: '32px 16px', maxWidth: 500, margin: '0 auto', background: 'var(--bg-card)', borderRadius: 12, border: '1px dashed var(--border)'}}>
-                    <i className="fas fa-clipboard-list" style={{fontSize: 40, color: 'var(--text-muted)', marginBottom: 12}}></i>
-                    <div style={{fontSize: 16, fontWeight: 600, marginBottom: 6}}>No jobs assigned to you yet</div>
-                    <div style={{fontSize: 13, color: 'var(--text-muted)'}}>
-                        Ask the office to add you to an open repair order, or use general clock-in below for non-job work.
-                    </div>
-                </div>
-            )}
+            <button className="touch-btn touch-btn-success" onClick={() => handleClockIn()} disabled={busy}
+                    style={{minWidth: 320, fontSize: 26, padding: '24px 48px'}}>
+                <i className="fas fa-play"></i> Clock In
+            </button>
 
-            <div style={{textAlign: 'center', marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--border)'}}>
-                <div style={{fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1}}>
-                    Cleanup, meetings, no specific job
-                </div>
-                <button className="touch-btn touch-btn-outline" onClick={() => handleClockIn()} disabled={busy}
-                        style={{minWidth: 240, fontSize: 14, padding: '12px 24px'}}>
-                    <i className="fas fa-clock"></i> General Clock In
-                </button>
-            </div>
-
-            <div style={{textAlign: 'center', marginTop: 24}}>
-                <div style={{padding: '12px 24px', background: 'var(--bg-card)', borderRadius: 12, display: 'inline-block', border: '1px solid var(--border)'}}>
-                    <div style={{fontSize: 14, color: 'var(--text-muted)', marginBottom: 4}}>Today's Total</div>
-                    <div style={{fontSize: 28, fontWeight: 700, fontFamily: 'monospace', color: 'var(--primary)'}}>
-                        {todayHours.toFixed(1)}h
-                    </div>
+            <div style={{marginTop: 32, padding: '16px 24px', background: 'var(--bg-card)', borderRadius: 12, display: 'inline-block', border: '1px solid var(--border)'}}>
+                <div style={{fontSize: 14, color: 'var(--text-muted)', marginBottom: 4}}>Today's Total</div>
+                <div style={{fontSize: 32, fontWeight: 700, fontFamily: 'monospace', color: 'var(--primary)'}}>
+                    {todayHours.toFixed(1)}h
                 </div>
             </div>
         </div>
