@@ -1285,7 +1285,7 @@ function NewEstimate({ navigate }) {
                 <div className="detail-grid">
                     <div className="card">
                         <div className="section-title"><i className="fas fa-user"></i> Customer & Vehicle</div>
-                        <div className="form-group">
+                        <div className="form-group" style={{position:'relative'}}>
                             <label>Customer <span style={{color:'var(--danger)'}}>*</span></label>
                             {selectedCustomer ? (
                                 <div style={{display:'flex', alignItems:'center', justifyContent:'space-between',
@@ -1303,42 +1303,39 @@ function NewEstimate({ navigate }) {
                                         <i className="fas fa-times"></i> Change
                                     </button>
                                 </div>
-                            ) : (
-                                <div style={{position:'relative', width:'100%'}}>
-                                    <input type="text" placeholder="Start typing a customer name or phone…"
-                                           value={custSearch} onChange={e => setCustSearch(e.target.value)}
-                                           autoFocus autoComplete="off"
-                                           style={{width:'100%', boxSizing:'border-box'}} />
-                                    {custSearch.trim() && (
-                                        <div style={{position:'absolute', top:'calc(100% + 2px)', left:0, right:0, zIndex:10,
-                                                     maxHeight:280, overflowY:'auto',
-                                                     border:'1px solid var(--border)', borderRadius:6,
-                                                     background:'var(--bg-card)', boxShadow:'0 6px 16px rgba(0,0,0,0.35)'}}>
-                                            {filteredCustomers.length === 0 ? (
-                                                <div className="text-muted" style={{padding:14, textAlign:'center', fontSize:13}}>
-                                                    No customer matches "{custSearch}".
+                            ) : <>
+                                <input type="text" placeholder="Start typing a customer name or phone…"
+                                       value={custSearch} onChange={e => setCustSearch(e.target.value)}
+                                       autoFocus autoComplete="off" />
+                                {custSearch.trim() && (
+                                    <div style={{position:'absolute', top:'100%', left:0, right:0, zIndex:10,
+                                                 marginTop:2, maxHeight:280, overflowY:'auto',
+                                                 border:'1px solid var(--border)', borderRadius:6,
+                                                 background:'var(--bg-card)', boxShadow:'0 6px 16px rgba(0,0,0,0.35)'}}>
+                                        {filteredCustomers.length === 0 ? (
+                                            <div className="text-muted" style={{padding:14, textAlign:'center', fontSize:13}}>
+                                                No customer matches "{custSearch}".
+                                            </div>
+                                        ) : (
+                                            filteredCustomers.map((c, i) => (
+                                                <div key={c.id}
+                                                     onClick={() => { set('customer_id', c.id); setCustSearch(''); }}
+                                                     style={{padding:'10px 14px', cursor:'pointer',
+                                                             borderBottom: i < filteredCustomers.length - 1 ? '1px solid var(--border)' : 'none'}}
+                                                     onMouseEnter={e => e.currentTarget.style.background='rgba(77,184,106,0.12)'}
+                                                     onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                    <div style={{fontWeight:500, fontSize:14}}>{custName(c)}</div>
+                                                    {(c.phone_home || c.city) && (
+                                                        <div className="text-sm text-muted" style={{marginTop:2}}>
+                                                            {[c.phone_home, [c.city, c.state].filter(Boolean).join(', ')].filter(Boolean).join(' · ')}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            ) : (
-                                                filteredCustomers.map((c, i) => (
-                                                    <div key={c.id}
-                                                         onClick={() => { set('customer_id', c.id); setCustSearch(''); }}
-                                                         style={{padding:'10px 14px', cursor:'pointer',
-                                                                 borderBottom: i < filteredCustomers.length - 1 ? '1px solid var(--border)' : 'none'}}
-                                                         onMouseEnter={e => e.currentTarget.style.background='rgba(77,184,106,0.12)'}
-                                                         onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                                                        <div style={{fontWeight:500, fontSize:14}}>{custName(c)}</div>
-                                                        {(c.phone_home || c.city) && (
-                                                            <div className="text-sm text-muted" style={{marginTop:2}}>
-                                                                {[c.phone_home, [c.city, c.state].filter(Boolean).join(', ')].filter(Boolean).join(' · ')}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ))
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                                            ))
+                                        )}
+                                    </div>
+                                )}
+                            </>}
                         </div>
                         <div className="form-group">
                             <label>Vehicle</label>
