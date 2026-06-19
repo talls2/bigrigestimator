@@ -217,7 +217,7 @@
 <div id="root"></div>
 <script src="/parts-catalog.js"></script>
 <script type="text/babel">
-const { useState, useEffect, useCallback } = React;
+const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
 // ═══════════════════════════════════════════════════════════
 // API CLIENT
@@ -1206,14 +1206,14 @@ function NewEstimate({ navigate }) {
     const [error, setError] = useState('');
 
     // Sort customers alphabetically by display name. Company customers sort
-    // by company_name, individuals by last + first. Memoize so we don't sort
-    // on every keystroke.
-    const sortedCustomers = React.useMemo(() => {
+    // by company_name; individuals by last + first. Memoized so the sort
+    // doesn't re-run on every keystroke.
+    const sortedCustomers = useMemo(() => {
         const key = (c) => (c.company_name || `${c.last_name||''} ${c.first_name||''}`).trim().toLowerCase();
         return [...customers].sort((a, b) => key(a).localeCompare(key(b)));
     }, [customers]);
 
-    const filteredCustomers = React.useMemo(() => {
+    const filteredCustomers = useMemo(() => {
         const q = custSearch.trim().toLowerCase();
         if (!q) return sortedCustomers;
         return sortedCustomers.filter(c =>
@@ -1223,6 +1223,8 @@ function NewEstimate({ navigate }) {
             || (c.phone_home||'').includes(q)
         );
     }, [sortedCustomers, custSearch]);
+
+    const selectedCustomer = customers.find(c => String(c.id) === String(form.customer_id));
 
     useEffect(() => {
         api('/customers').then(setCustomers).catch(() => {});
@@ -1283,19 +1285,62 @@ function NewEstimate({ navigate }) {
                     <div className="card">
                         <div className="section-title"><i className="fas fa-user"></i> Customer & Vehicle</div>
                         <div className="form-group">
-                            <label>Customer *</label>
-                            <input type="search" placeholder={`Search ${customers.length} customers by name or phone…`}
-                                   value={custSearch} onChange={e => setCustSearch(e.target.value)}
-                                   style={{marginBottom:6}} />
-                            <select value={form.customer_id} onChange={e => set('customer_id', e.target.value)} required
-                                    size={Math.min(8, Math.max(3, filteredCustomers.length + 1))}>
-                                <option value="">Select Customer...</option>
-                                {filteredCustomers.map(c => <option key={c.id} value={c.id}>{custName(c)}{c.phone_home ? ` · ${c.phone_home}` : ''}</option>)}
-                            </select>
-                            {custSearch && (
-                                <div className="text-sm text-muted" style={{marginTop:4}}>
-                                    {filteredCustomers.length} of {customers.length} customers match
+                            <label>Customer <span style={{color:'var(--danger)'}}>*</span></label>
+                            {selectedCustomer ? (
+                                <div style={{display:'flex', alignItems:'center', justifyContent:'space-between',
+                                             padding:'10px 12px', background:'rgba(77,184,106,0.10)',
+                                             border:'1px solid var(--primary)', borderRadius:6}}>
+                                    <div>
+                                        <div style={{fontWeight:600}}>{custName(selectedCustomer)}</div>
+                                        <div className="text-sm text-muted">
+                                            {[selectedCustomer.phone_home, selectedCustomer.email, [selectedCustomer.city, selectedCustomer.state].filter(Boolean).join(', ')].filter(Boolean).join(' · ') || 'No contact info on file'}
+                                        </div>
+                                    </div>
+                                    <button type="button" className="btn btn-outline btn-sm"
+                                            onClick={() => { set('customer_id', ''); setCustSearch(''); }}
+                                            title="Change customer">
+                                        <i className="fas fa-times"></i> Change
+                                    </button>
                                 </div>
+                            ) : (
+                                <>
+                                    <input type="search" placeholder={`Search ${customers.length} customers by name or phone…`}
+                                           value={custSearch} onChange={e => setCustSearch(e.target.value)}
+                                           autoFocus />
+                                    <div style={{maxHeight:240, overflowY:'auto', border:'1px solid var(--border)',
+                                                 borderRadius:6, marginTop:6, background:'var(--bg)'}}>
+                                        {filteredCustomers.length === 0 ? (
+                                            <div className="text-muted" style={{padding:14, textAlign:'center', fontSize:13}}>
+                                                {customers.length === 0 ? 'No customers yet — create one first.' : 'No matches. Try a different search.'}
+                                            </div>
+                                        ) : (
+                                            filteredCustomers.map(c => (
+                                                <div key={c.id}
+                                                     onClick={() => { set('customer_id', c.id); setCustSearch(''); }}
+                                                     style={{padding:'8px 12px', cursor:'pointer',
+                                                             borderBottom:'1px solid var(--border)',
+                                                             display:'flex', justifyContent:'space-between', alignItems:'center'}}
+                                                     onMouseEnter={e => e.currentTarget.style.background='rgba(77,184,106,0.10)'}
+                                                     onMouseLeave={e => e.currentTarget.style.background='transparent'}>
+                                                    <div>
+                                                        <div style={{fontWeight:500}}>{custName(c)}</div>
+                                                        {(c.phone_home || c.city) && (
+                                                            <div className="text-sm text-muted">
+                                                                {[c.phone_home, [c.city, c.state].filter(Boolean).join(', ')].filter(Boolean).join(' · ')}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <i className="fas fa-chevron-right text-muted" style={{fontSize:11}}></i>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                    <div className="text-sm text-muted" style={{marginTop:4}}>
+                                        {custSearch
+                                            ? `${filteredCustomers.length} of ${customers.length} match`
+                                            : `Sorted alphabetically · ${customers.length} customers`}
+                                    </div>
+                                </>
                             )}
                         </div>
                         <div className="form-group">
