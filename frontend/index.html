@@ -1205,12 +1205,13 @@ function NewEstimate({ navigate }) {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
 
-    // Sort customers alphabetically by display name. Company customers sort
-    // by company_name; individuals by last + first. Memoized so the sort
-    // doesn't re-run on every keystroke.
+    // Sort customers alphabetically by what shows on screen (custName output).
+    // That way "Dennis Alden" sorts with the D's, "Avon Septic" with the A's,
+    // etc. — matches what the user sees when scanning the list.
     const sortedCustomers = useMemo(() => {
-        const key = (c) => (c.company_name || `${c.last_name||''} ${c.first_name||''}`).trim().toLowerCase();
-        return [...customers].sort((a, b) => key(a).localeCompare(key(b)));
+        return [...customers].sort((a, b) =>
+            custName(a).toLowerCase().localeCompare(custName(b).toLowerCase())
+        );
     }, [customers]);
 
     const filteredCustomers = useMemo(() => {
@@ -1303,30 +1304,31 @@ function NewEstimate({ navigate }) {
                                     </button>
                                 </div>
                             ) : (
-                                <div style={{position:'relative'}}>
-                                    <input type="search" placeholder="Start typing a customer name or phone…"
+                                <div style={{position:'relative', width:'100%'}}>
+                                    <input type="text" placeholder="Start typing a customer name or phone…"
                                            value={custSearch} onChange={e => setCustSearch(e.target.value)}
-                                           autoFocus autoComplete="off" />
+                                           autoFocus autoComplete="off"
+                                           style={{width:'100%', boxSizing:'border-box'}} />
                                     {custSearch.trim() && (
-                                        <div style={{position:'absolute', top:'100%', left:0, right:0, zIndex:10,
+                                        <div style={{position:'absolute', top:'calc(100% + 2px)', left:0, right:0, zIndex:10,
                                                      maxHeight:280, overflowY:'auto',
-                                                     border:'1px solid var(--border)', borderRadius:6, marginTop:2,
-                                                     background:'var(--bg-card)', boxShadow:'0 4px 12px rgba(0,0,0,0.15)'}}>
+                                                     border:'1px solid var(--border)', borderRadius:6,
+                                                     background:'var(--bg-card)', boxShadow:'0 6px 16px rgba(0,0,0,0.35)'}}>
                                             {filteredCustomers.length === 0 ? (
                                                 <div className="text-muted" style={{padding:14, textAlign:'center', fontSize:13}}>
                                                     No customer matches "{custSearch}".
                                                 </div>
                                             ) : (
-                                                filteredCustomers.map(c => (
+                                                filteredCustomers.map((c, i) => (
                                                     <div key={c.id}
                                                          onClick={() => { set('customer_id', c.id); setCustSearch(''); }}
-                                                         style={{padding:'8px 12px', cursor:'pointer',
-                                                                 borderBottom:'1px solid var(--border)'}}
-                                                         onMouseEnter={e => e.currentTarget.style.background='rgba(77,184,106,0.10)'}
+                                                         style={{padding:'10px 14px', cursor:'pointer',
+                                                                 borderBottom: i < filteredCustomers.length - 1 ? '1px solid var(--border)' : 'none'}}
+                                                         onMouseEnter={e => e.currentTarget.style.background='rgba(77,184,106,0.12)'}
                                                          onMouseLeave={e => e.currentTarget.style.background='transparent'}>
-                                                        <div style={{fontWeight:500}}>{custName(c)}</div>
+                                                        <div style={{fontWeight:500, fontSize:14}}>{custName(c)}</div>
                                                         {(c.phone_home || c.city) && (
-                                                            <div className="text-sm text-muted">
+                                                            <div className="text-sm text-muted" style={{marginTop:2}}>
                                                                 {[c.phone_home, [c.city, c.state].filter(Boolean).join(', ')].filter(Boolean).join(' · ')}
                                                             </div>
                                                         )}
