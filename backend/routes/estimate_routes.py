@@ -31,6 +31,7 @@ class EstimateIn(BaseModel):
     point_of_impact: Optional[str] = None
     damage_description: Optional[str] = None
     tax_exempt: Optional[int] = None
+    closed_date: Optional[str] = None
     notes: Optional[str] = None
 
 

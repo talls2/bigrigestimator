@@ -80,6 +80,13 @@ class EstimateService:
         if not existing:
             raise ValueError(f"Estimate {estimate_id} not found")
 
+        # Auto-stamp closed_date when an estimate moves to a terminal status.
+        new_status = data.get("status")
+        terminal = {"converted", "rejected", "approved"}
+        if new_status in terminal and not existing.get("closed_date") and "closed_date" not in data:
+            from datetime import date
+            data["closed_date"] = date.today().isoformat()
+
         self.estimate_repo.update(estimate_id, data)
 
         # If tax_exempt was toggled, totals need to be recomputed.
@@ -327,7 +334,11 @@ class EstimateService:
                 )
             db.commit()
 
-        # Mark estimate as converted
-        self.estimate_repo.update(estimate_id, {"status": "converted"})
+        # Mark estimate as converted + stamp the closed date.
+        from datetime import date
+        self.estimate_repo.update(estimate_id, {
+            "status": "converted",
+            "closed_date": date.today().isoformat(),
+        })
 
         return {"id": ro_id, "ro_number": ro_data["ro_number"], "message": "Repair order created from estimate"}

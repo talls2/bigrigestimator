@@ -331,6 +331,19 @@ def run_migrations(conn) -> None:
     # PNG of the customer's signature for work authorization.
     _add_column(conn, "repair_orders", "customer_signature", "TEXT")
 
+    # Migration 003g: estimates.closed_date — stamped when an estimate moves to
+    # a terminal status (converted / rejected / approved).
+    _add_column(conn, "estimates", "closed_date", "TEXT")
+    # Backfill for existing rows in terminal states: use updated_at as best
+    # available proxy for "when did this stop being active".
+    conn.execute("""
+        UPDATE estimates
+           SET closed_date = COALESCE(closed_date, DATE(updated_at), DATE(created_at))
+         WHERE status IN ('converted','rejected','approved')
+           AND closed_date IS NULL
+    """)
+    conn.commit()
+
     # Migration 003c: ro_assignments join table for multi-worker assignment.
     # CREATE IF NOT EXISTS already handles fresh installs via TABLES, but on
     # a live DB we also back-fill from the legacy fixed columns the first time.

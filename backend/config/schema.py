@@ -159,6 +159,7 @@ TABLES = [
         loss_date TEXT,
         estimate_date TEXT DEFAULT (date('now')),
         sent_date TEXT,
+        closed_date TEXT,
         point_of_impact TEXT,
         damage_description TEXT,
         subtotal_labor REAL DEFAULT 0,

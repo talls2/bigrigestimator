@@ -1161,7 +1161,7 @@ function EstimatesPage({ navigate }) {
                 </select>
             </div>
             <div className="card"><div className="table-wrapper">
-                <table><thead><tr><th>Estimate #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Loss Date</th><th>Total</th><th style={{width:50}}></th></tr></thead>
+                <table><thead><tr><th>Estimate #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Opened</th><th>Closed</th><th>Total</th><th style={{width:50}}></th></tr></thead>
                 <tbody>
                 {estimates.map(e => (
                     <tr key={e.id} className="clickable" onClick={() => navigate('est-detail', e.id)}>
@@ -1169,7 +1169,8 @@ function EstimatesPage({ navigate }) {
                         <td>{custName(e)}</td>
                         <td>{vehDesc(e)}</td>
                         <td><Badge status={e.status} /></td>
-                        <td>{fmtDate(e.loss_date)}</td>
+                        <td className="text-sm">{fmtDate(e.estimate_date)}</td>
+                        <td className="text-sm">{e.closed_date ? fmtDate(e.closed_date) : <span className="text-muted">—</span>}</td>
                         <td className="money">{fmt(e.total_amount)}</td>
                         <td style={{textAlign:'right'}}>
                             {e.status !== 'converted' && (
