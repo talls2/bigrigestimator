@@ -2194,7 +2194,7 @@ function RepairOrdersPage({ navigate }) {
                 </select>
             </div>
             <div className="card"><div className="table-wrapper">
-                <table><thead><tr><th>RO #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Priority</th><th>Target Date</th><th>Total</th><th>Balance</th></tr></thead>
+                <table><thead><tr><th>RO #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Opened</th><th>Closed</th><th>Target</th><th>Total</th><th>Balance</th></tr></thead>
                 <tbody>
                 {ros.map(r => (
                     <tr key={r.id} className="clickable" onClick={() => navigate('ro-detail', r.id)}>
@@ -2202,8 +2202,9 @@ function RepairOrdersPage({ navigate }) {
                         <td>{custName(r)}</td>
                         <td>{vehDesc(r)}</td>
                         <td><Badge status={r.status} /></td>
-                        <td><Badge status={r.priority} /></td>
-                        <td>{fmtDate(r.target_delivery_date)}</td>
+                        <td className="text-sm">{fmtDate(r.create_date)}</td>
+                        <td className="text-sm">{r.closed_date ? fmtDate(r.closed_date) : (r.delivered_date ? <span title="Delivered, not yet closed">{fmtDate(r.delivered_date)}</span> : <span className="text-muted">—</span>)}</td>
+                        <td className="text-sm">{fmtDate(r.target_delivery_date)}</td>
                         <td className="money">{fmt(r.total_amount)}</td>
                         <td className="money" style={{color: r.balance_due > 0 ? 'var(--red)' : 'var(--green)'}}>{fmt(r.balance_due)}</td>
                     </tr>
