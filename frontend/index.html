@@ -1128,6 +1128,7 @@ function EstimatesPage({ navigate }) {
     const [estimates, setEstimates] = useState([]);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
+    const [showConverted, setShowConverted] = useState(false);
 
     const load = () => {
         let q = '/estimates?';
@@ -1136,6 +1137,14 @@ function EstimatesPage({ navigate }) {
         api(q).then(setEstimates);
     };
     useEffect(() => { load(); }, [search, statusFilter]);
+
+    // By default hide converted estimates (they're now ROs and live on
+    // the Repair Orders page). The 'Include converted' toggle brings
+    // them back for historical browsing. An explicit status filter of
+    // 'converted' always overrides and shows them.
+    const visibleEstimates = (statusFilter === 'converted' || showConverted)
+        ? estimates
+        : estimates.filter(e => e.status !== 'converted');
 
     const deleteEstimate = async (est, ev) => {
         ev.stopPropagation();
@@ -1155,15 +1164,22 @@ function EstimatesPage({ navigate }) {
             <div className="search-bar">
                 <input placeholder="Search estimates..." value={search} onChange={e => setSearch(e.target.value)} />
                 <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{width:160}}>
-                    <option value="">All Statuses</option>
+                    <option value="">All Active</option>
                     <option value="draft">Draft</option><option value="pending">Pending</option>
-                    <option value="approved">Approved</option><option value="converted">Converted</option>
+                    <option value="approved">Approved</option><option value="rejected">Rejected</option>
+                    <option value="converted">Converted (now RO)</option>
                 </select>
+                <label style={{display:'flex', alignItems:'center', gap:6, fontSize:13, color:'var(--text-muted)', cursor:'pointer', whiteSpace:'nowrap'}}>
+                    <input type="checkbox" checked={showConverted}
+                           disabled={statusFilter === 'converted'}
+                           onChange={e => setShowConverted(e.target.checked)} />
+                    Include converted
+                </label>
             </div>
             <div className="card"><div className="table-wrapper">
                 <table><thead><tr><th>Estimate #</th><th>Customer</th><th>Vehicle</th><th>Status</th><th>Opened</th><th>Closed</th><th>Total</th><th style={{width:50}}></th></tr></thead>
                 <tbody>
-                {estimates.map(e => (
+                {visibleEstimates.map(e => (
                     <tr key={e.id} className="clickable" onClick={() => navigate('est-detail', e.id)}>
                         <td style={{color:'var(--primary)', fontWeight:600}}>{e.estimate_number}</td>
                         <td>{custName(e)}</td>
@@ -1182,6 +1198,11 @@ function EstimatesPage({ navigate }) {
                         </td>
                     </tr>
                 ))}
+                {!visibleEstimates.length && estimates.some(e => e.status === 'converted') && (
+                    <tr><td colSpan="8" className="text-muted" style={{textAlign:'center', padding:24, fontSize:13}}>
+                        No active estimates. {estimates.filter(e => e.status === 'converted').length} converted estimate(s) hidden — check "Include converted" to see them, or open the Repair Orders page.
+                    </td></tr>
+                )}
                 </tbody></table>
             </div></div>
         </div>
