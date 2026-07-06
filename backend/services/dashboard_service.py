@@ -75,4 +75,25 @@ class DashboardService:
         recent_estimates = self.estimate_repo.list_with_details(limit=10)
         stats["recent_estimates"] = recent_estimates
 
+        # Follow-Up Needed: active estimates with no status change in >7 days.
+        # Terminal statuses (converted/rejected) are excluded — those are done.
+        with get_db() as db:
+            rows = db.execute(
+                """
+                SELECT e.id, e.estimate_number, e.status, e.estimate_date,
+                       e.updated_at, e.total_amount,
+                       c.first_name, c.last_name, c.company_name, c.phone_home,
+                       v.year, v.make, v.model, v.vin,
+                       CAST((julianday('now') - julianday(e.updated_at)) AS INTEGER) AS days_stale
+                FROM estimates e
+                LEFT JOIN customers c ON e.customer_id = c.id
+                LEFT JOIN vehicles v  ON e.vehicle_id  = v.id
+                WHERE e.status NOT IN ('converted', 'rejected')
+                  AND julianday('now') - julianday(e.updated_at) >= 7
+                ORDER BY e.updated_at ASC
+                LIMIT 25
+                """
+            ).fetchall()
+            stats["follow_up_needed"] = rows_to_list(rows)
+
         return stats

@@ -663,6 +663,46 @@ function Dashboard({ navigate }) {
                     </div>
                 </div>
             </div>
+
+            {/* ── Follow-Up Needed: estimates stalled >7 days ── */}
+            {(data.follow_up_needed || []).length > 0 && (
+                <div className="card mt-4" style={{borderLeft:'3px solid #eab308'}}>
+                    <div className="card-header" style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                        <h3 style={{margin:0}}>
+                            <i className="fas fa-phone-volume" style={{color:'#eab308', marginRight:8}}></i>
+                            Follow-Up Needed
+                            <span className="text-muted text-sm" style={{marginLeft:8, fontWeight:400}}>
+                                ({data.follow_up_needed.length} estimate{data.follow_up_needed.length === 1 ? '' : 's'} stalled &gt; 7 days)
+                            </span>
+                        </h3>
+                    </div>
+                    <div className="text-sm text-muted" style={{padding:'0 12px 12px', lineHeight:1.4}}>
+                        These customers were quoted but haven't moved forward. Give them a call to check in — is the price OK? Waiting on insurance? Ready to schedule?
+                    </div>
+                    <div className="table-wrapper">
+                        <table>
+                            <thead><tr><th>Est #</th><th>Customer</th><th>Phone</th><th>Vehicle</th><th>Status</th><th>Days Stalled</th><th>Total</th></tr></thead>
+                            <tbody>
+                                {data.follow_up_needed.map(e => (
+                                    <tr key={e.id} className="clickable" onClick={() => navigate('est-detail', e.id)}>
+                                        <td style={{color:'var(--primary)', fontWeight:600}}>{e.estimate_number}</td>
+                                        <td>{custName(e)}</td>
+                                        <td className="text-sm">{e.phone_home || '—'}</td>
+                                        <td>{vehDesc(e)}</td>
+                                        <td><Badge status={e.status}/></td>
+                                        <td>
+                                            <span style={{fontWeight:600, color: e.days_stale >= 30 ? 'var(--danger)' : e.days_stale >= 14 ? '#eab308' : 'var(--text)'}}>
+                                                {e.days_stale}d
+                                            </span>
+                                        </td>
+                                        <td className="money">{fmt(e.total_amount)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
