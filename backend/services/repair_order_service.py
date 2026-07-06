@@ -243,6 +243,53 @@ class RepairOrderService:
 
         return payment_id
 
+    def delete_payment(self, ro_id: int, payment_id: int) -> dict:
+        """
+        Void (delete) a payment on a repair order.
+
+        Works even when the RO is closed — the secretary might discover a
+        wrong entry weeks later. After deleting, amount_paid and balance_due
+        are recomputed so the RO reflects the corrected total.
+
+        Args:
+            ro_id: Repair order ID (used for authorization / consistency check)
+            payment_id: Payment row ID to delete
+
+        Returns:
+            Dict with the RO's new amount_paid and balance_due.
+
+        Raises:
+            ValueError: If the RO or payment doesn't exist, or the payment
+                        doesn't belong to this RO.
+        """
+        # Verify the RO exists at all
+        ro = self.repo.get_by_id(ro_id)
+        if not ro:
+            raise ValueError(f"Repair order {ro_id} not found")
+
+        # Verify the payment exists AND belongs to this RO — protects against
+        # rogue calls that try to delete another RO's payment by guessing IDs.
+        pay = self.payment_repo.get_payment(payment_id)
+        if not pay:
+            raise ValueError(f"Payment {payment_id} not found")
+        if int(pay.get("ro_id") or 0) != int(ro_id):
+            raise ValueError(f"Payment {payment_id} does not belong to RO {ro_id}")
+
+        deleted = self.payment_repo.delete_payment(payment_id)
+        if not deleted:
+            raise ValueError(f"Payment {payment_id} could not be deleted")
+
+        # Recompute totals — flips balance_due back up if this was a real payment
+        self.repo.recalc_totals(ro_id)
+
+        # Return the refreshed money numbers so the client can update in place
+        refreshed = self.repo.get_by_id(ro_id) or {}
+        return {
+            "deleted_payment_id": payment_id,
+            "amount_paid": refreshed.get("amount_paid", 0),
+            "balance_due": refreshed.get("balance_due", 0),
+        }
+
     # ── Team assignments ──
     def list_team(self, ro_id: int) -> list[dict]:
         """Return the list of (employee, role) assignments for an RO, with employee names."""

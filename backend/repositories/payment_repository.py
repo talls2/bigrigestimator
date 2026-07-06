@@ -42,3 +42,26 @@ class PaymentRepository(BaseRepository):
             )
             db.commit()
             return cur.lastrowid
+
+    def get_payment(self, payment_id: int) -> dict | None:
+        """Return a single payment row, or None if it doesn't exist."""
+        with get_db() as db:
+            row = db.execute(
+                f"SELECT * FROM {self.table_name} WHERE id = ?",
+                (payment_id,)
+            ).fetchone()
+        return row_to_dict(row) if row else None
+
+    def delete_payment(self, payment_id: int) -> bool:
+        """
+        Void (hard-delete) a payment by id. Returns True if a row was deleted.
+        The caller is responsible for recalculating the RO's amount_paid /
+        balance_due after this returns.
+        """
+        with get_db() as db:
+            cur = db.execute(
+                f"DELETE FROM {self.table_name} WHERE id = ?",
+                (payment_id,)
+            )
+            db.commit()
+            return cur.rowcount > 0

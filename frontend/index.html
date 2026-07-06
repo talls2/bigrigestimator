@@ -2684,6 +2684,22 @@ function RODetail({ id, navigate }) {
         load();
     };
 
+    // Void a payment even if the RO is closed — the secretary occasionally
+    // discovers a wrong amount weeks after the fact and needs to correct it.
+    // Backend re-runs recalc_totals so amount_paid / balance_due update.
+    const voidPayment = async (p) => {
+        const amt = fmt(p.amount);
+        const dateStr = p.payment_date ? fmtDate(p.payment_date) : 'no date';
+        const method = (p.payment_method || 'payment').replace(/_/g, ' ');
+        if (!confirm(`Void this payment?\n\n${amt} · ${method} · ${dateStr}\n\nBalance due will go back up by ${amt}. This can't be undone.`)) return;
+        try {
+            await api(`/repair-orders/${id}/payments/${p.id}`, { method: 'DELETE' });
+            load();
+        } catch (err) {
+            alert('Failed to void payment: ' + (err.message || err));
+        }
+    };
+
     const toggleTaxExempt = async () => {
         try {
             await api(`/repair-orders/${id}`, { method: 'PUT', body: { customer_id: ro.customer_id, tax_exempt: ro.tax_exempt ? 0 : 1 } });
@@ -3051,16 +3067,33 @@ function RODetail({ id, navigate }) {
             {tab === 'payments' && (
                 <div className="card">
                     <div className="card-header"><h3>Payments</h3><button className="btn btn-primary btn-sm" onClick={() => setShowPayment(true)}><i className="fas fa-plus"></i> Add Payment</button></div>
-                    <table><thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th><th>Payer</th></tr></thead>
+                    <table><thead><tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th><th>Payer</th><th style={{width:50}}></th></tr></thead>
                     <tbody>
                     {(ro.payments||[]).map(p => (
                         <tr key={p.id}>
-                            <td>{fmtDate(p.payment_date)}</td><td className="money text-green" style={{fontWeight:600}}>{fmt(p.amount)}</td>
-                            <td>{(p.payment_method||'').replace(/_/g,' ')}</td><td>{p.reference_number||'—'}</td><td>{p.payer_name||'—'}</td>
+                            <td>{fmtDate(p.payment_date)}</td>
+                            <td className="money text-green" style={{fontWeight:600}}>{fmt(p.amount)}</td>
+                            <td>{(p.payment_method||'').replace(/_/g,' ')}</td>
+                            <td>{p.reference_number||'—'}</td>
+                            <td>{p.payer_name||'—'}</td>
+                            <td style={{textAlign:'right'}}>
+                                <button className="btn btn-outline btn-sm"
+                                        onClick={() => voidPayment(p)}
+                                        title="Void this payment"
+                                        style={{color:'var(--danger)', borderColor:'var(--danger)', padding:'4px 8px'}}>
+                                    <i className="fas fa-trash"></i>
+                                </button>
+                            </td>
                         </tr>
                     ))}
-                    {!(ro.payments||[]).length && <tr><td colSpan="5" className="text-muted" style={{textAlign:'center',padding:24}}>No payments recorded</td></tr>}
+                    {!(ro.payments||[]).length && <tr><td colSpan="6" className="text-muted" style={{textAlign:'center',padding:24}}>No payments recorded</td></tr>}
                     </tbody></table>
+                    {(ro.payments||[]).length > 0 && (
+                        <div className="text-sm text-muted" style={{padding:'8px 14px', borderTop:'1px solid var(--border)', lineHeight:1.4}}>
+                            <i className="fas fa-info-circle" style={{marginRight:4}}></i>
+                            Voiding a payment updates balance due and works even after the RO is closed.
+                        </div>
+                    )}
                 </div>
             )}
 

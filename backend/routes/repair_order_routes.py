@@ -195,6 +195,23 @@ def add_repair_order_payment(ro_id: int, data: PaymentIn):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/{ro_id}/payments/{payment_id}")
+def delete_repair_order_payment(ro_id: int, payment_id: int):
+    """
+    Void a payment on a repair order. Works even after the RO is closed —
+    if the secretary logged the wrong amount and only notices later,
+    they need to be able to correct it. amount_paid and balance_due are
+    recomputed and returned.
+    """
+    try:
+        result = service.delete_payment(ro_id, payment_id)
+        return {"message": "Payment voided", **result}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{ro_id}/team")
 def list_ro_team(ro_id: int):
     """List the team assigned to this RO (workers + roles)."""
