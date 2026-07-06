@@ -64,6 +64,39 @@ def list_estimates(status: Optional[str] = Query(None), search: Optional[str] = 
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/follow-up")
+def list_follow_up(min_days: int = Query(7, ge=1, le=365), limit: int = Query(200, ge=1, le=1000)):
+    """
+    List estimates that need follow-up: no status change in at least min_days days,
+    excluding terminal statuses (converted, rejected).
+    Ordered oldest-first (most stale at the top).
+    """
+    try:
+        from config.database import get_db, rows_to_list
+        with get_db() as db:
+            rows = db.execute(
+                """
+                SELECT e.id, e.estimate_number, e.status, e.estimate_date,
+                       e.updated_at, e.total_amount, e.closed_date,
+                       c.first_name, c.last_name, c.company_name,
+                       c.phone_home, c.phone_cell, c.email,
+                       v.year, v.make, v.model, v.vin,
+                       CAST((julianday('now') - julianday(e.updated_at)) AS INTEGER) AS days_stale
+                FROM estimates e
+                LEFT JOIN customers c ON e.customer_id = c.id
+                LEFT JOIN vehicles  v ON e.vehicle_id  = v.id
+                WHERE e.status NOT IN ('converted', 'rejected')
+                  AND julianday('now') - julianday(e.updated_at) >= ?
+                ORDER BY e.updated_at ASC
+                LIMIT ?
+                """,
+                (min_days, limit),
+            ).fetchall()
+            return rows_to_list(rows)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/{estimate_id}")
 def get_estimate(estimate_id: int):
     """Get a complete estimate with all details and line items."""

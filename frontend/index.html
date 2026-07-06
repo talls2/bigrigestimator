@@ -557,6 +557,7 @@ function Sidebar({ page, setPage, user, onLogout }) {
         ]},
         { section: 'Operations', items: [
             { id: 'estimates', icon: 'fa-file-invoice-dollar', label: 'Estimates' },
+            { id: 'follow-ups', icon: 'fa-phone-volume', label: 'Follow-Ups' },
             { id: 'repair-orders', icon: 'fa-wrench', label: 'Repair Orders' },
             { id: 'production', icon: 'fa-industry', label: 'Production' },
         ]},
@@ -1244,6 +1245,148 @@ function EstimatesPage({ navigate }) {
                     </td></tr>
                 )}
                 </tbody></table>
+            </div></div>
+        </div>
+    );
+}
+
+// ═══════════════════════════════════════════════════════════
+// FOLLOW-UPS PAGE — stalled estimates that need a call
+// Customers who were quoted but haven't moved forward.
+// ═══════════════════════════════════════════════════════════
+function FollowUpsPage({ navigate }) {
+    const [rows, setRows] = useState([]);
+    const [minDays, setMinDays] = useState(7);
+    const [search, setSearch] = useState('');
+    const [loading, setLoading] = useState(true);
+
+    const load = () => {
+        setLoading(true);
+        api(`/estimates/follow-up?min_days=${minDays}&limit=500`)
+            .then(setRows)
+            .catch(() => setRows([]))
+            .finally(() => setLoading(false));
+    };
+    useEffect(() => { load(); }, [minDays]);
+
+    const filtered = !search.trim() ? rows : rows.filter(e => {
+        const q = search.toLowerCase();
+        return (
+            custName(e).toLowerCase().includes(q) ||
+            (e.estimate_number || '').toLowerCase().includes(q) ||
+            vehDesc(e).toLowerCase().includes(q) ||
+            (e.phone_home || '').includes(q) ||
+            (e.phone_cell || '').includes(q)
+        );
+    });
+
+    // Group by staleness bucket for a quick "who's most urgent"
+    const buckets = {
+        red: filtered.filter(e => e.days_stale >= 30),
+        yellow: filtered.filter(e => e.days_stale >= 14 && e.days_stale < 30),
+        blue: filtered.filter(e => e.days_stale < 14),
+    };
+    const totalValue = filtered.reduce((sum, e) => sum + (Number(e.total_amount) || 0), 0);
+
+    return (
+        <div>
+            <div className="page-header">
+                <h2>
+                    <i className="fas fa-phone-volume" style={{color:'#eab308', marginRight:8}}></i>
+                    Follow-Ups
+                </h2>
+                <button className="btn btn-outline btn-sm" onClick={load} title="Refresh">
+                    <i className="fas fa-rotate"></i> Refresh
+                </button>
+            </div>
+            <div className="text-sm text-muted" style={{marginBottom:16, lineHeight:1.5}}>
+                Estimates where the customer was quoted but hasn't moved forward. Give them a call to check in —
+                is the price OK? Waiting on insurance? Ready to schedule?
+                <br/>
+                Converted and rejected estimates are hidden (those are done).
+            </div>
+
+            {/* Summary cards */}
+            <div className="stats-grid" style={{marginBottom:16}}>
+                <div className="stat-card">
+                    <div className="stat-label">Total to follow up</div>
+                    <div className="stat-value">{filtered.length}</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-label">30+ days stale</div>
+                    <div className="stat-value" style={{color:'var(--danger)'}}>{buckets.red.length}</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-label">14–29 days stale</div>
+                    <div className="stat-value" style={{color:'#eab308'}}>{buckets.yellow.length}</div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-label">Estimate value at stake</div>
+                    <div className="stat-value money">{fmt(totalValue)}</div>
+                </div>
+            </div>
+
+            <div className="search-bar">
+                <input placeholder="Search by customer, estimate #, phone, or vehicle..."
+                       value={search} onChange={e => setSearch(e.target.value)} />
+                <select value={minDays} onChange={e => setMinDays(Number(e.target.value))} style={{width:200}}>
+                    <option value={3}>Stale ≥ 3 days</option>
+                    <option value={7}>Stale ≥ 7 days</option>
+                    <option value={14}>Stale ≥ 14 days</option>
+                    <option value={30}>Stale ≥ 30 days</option>
+                    <option value={60}>Stale ≥ 60 days</option>
+                </select>
+            </div>
+
+            <div className="card"><div className="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Est #</th>
+                            <th>Customer</th>
+                            <th>Phone</th>
+                            <th>Vehicle</th>
+                            <th>Status</th>
+                            <th>Days Stalled</th>
+                            <th>Last Update</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {loading && (
+                            <tr><td colSpan="8" className="text-muted" style={{textAlign:'center', padding:24}}>Loading…</td></tr>
+                        )}
+                        {!loading && filtered.length === 0 && (
+                            <tr><td colSpan="8" className="text-muted" style={{textAlign:'center', padding:32}}>
+                                <i className="fas fa-check-circle" style={{color:'var(--primary)', fontSize:24, display:'block', marginBottom:8}}></i>
+                                Nothing needs following up right now — everything's moving.
+                            </td></tr>
+                        )}
+                        {!loading && filtered.map(e => (
+                            <tr key={e.id} className="clickable" onClick={() => navigate('est-detail', e.id)}>
+                                <td style={{color:'var(--primary)', fontWeight:600}}>{e.estimate_number}</td>
+                                <td>{custName(e)}</td>
+                                <td className="text-sm">
+                                    {e.phone_home || e.phone_cell || <span className="text-muted">—</span>}
+                                </td>
+                                <td>{vehDesc(e)}</td>
+                                <td><Badge status={e.status}/></td>
+                                <td>
+                                    <span style={{
+                                        fontWeight:600,
+                                        color: e.days_stale >= 30 ? 'var(--danger)'
+                                             : e.days_stale >= 14 ? '#eab308'
+                                             : 'var(--text)'
+                                    }}>
+                                        {e.days_stale}d
+                                    </span>
+                                </td>
+                                <td className="text-sm text-muted">{fmtDate(e.updated_at)}</td>
+                                <td className="money">{fmt(e.total_amount)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div></div>
         </div>
     );
@@ -4839,6 +4982,7 @@ function AdminView({ user, onLogout }) {
         case 'vehicles': content = <VehiclesPage navigate={navigate} />; break;
         case 'vehicle-detail': content = <VehicleDetail id={detailId} navigate={navigate} />; break;
         case 'estimates': content = <EstimatesPage navigate={navigate} />; break;
+        case 'follow-ups': content = <FollowUpsPage navigate={navigate} />; break;
         case 'est-new': content = <NewEstimate navigate={navigate} />; break;
         case 'est-detail': content = <EstimateDetail id={detailId} navigate={navigate} />; break;
         case 'repair-orders': content = <RepairOrdersPage navigate={navigate} />; break;
