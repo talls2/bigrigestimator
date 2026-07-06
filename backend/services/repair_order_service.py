@@ -157,10 +157,14 @@ class RepairOrderService:
         from config.database import get_db
         allowed = {"taxable", "operation", "description", "part_number", "part_type",
                    "quantity", "labor_hours", "labor_rate", "paint_hours", "paint_rate",
-                   "part_price", "part_cost", "notes"}
+                   "part_price", "part_cost", "status", "notes"}
         clean = {k: v for k, v in data.items() if k in allowed and v is not None}
         if "taxable" in clean:
             clean["taxable"] = 1 if clean["taxable"] else 0
+        if "status" in clean:
+            allowed_statuses = {"pending", "ordered", "received", "installed", "complete"}
+            if clean["status"] not in allowed_statuses:
+                raise ValueError(f"Invalid line status: {clean['status']}")
         if not clean:
             return
         with get_db() as db:

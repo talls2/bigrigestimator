@@ -2586,6 +2586,17 @@ function RODetail({ id, navigate }) {
         } catch (err) { alert('Failed to update: ' + (err.message || err)); }
     };
 
+    // Advance a line's status through the parts workflow
+    // (pending → ordered → received → installed → complete).
+    // Used by the Status dropdown in the line items table.
+    const updateLineStatus = async (line, newStatus) => {
+        if (newStatus === (line.status || 'pending')) return;
+        try {
+            await api(`/repair-orders/${id}/lines/${line.id}`, { method: 'PATCH', body: { status: newStatus } });
+            load();
+        } catch (err) { alert('Failed to update status: ' + (err.message || err)); }
+    };
+
     const moveLine = async (lineId, direction) => {
         try {
             await api(`/repair-orders/${id}/lines/${lineId}/move?direction=${direction}`, { method: 'POST' });
@@ -3011,7 +3022,44 @@ function RODetail({ id, navigate }) {
                                         </button>
                                     ) : (l.taxable ? <i className="fas fa-check text-green"></i> : <span className="text-muted">—</span>)}
                                 </td>
-                                <td><Badge status={l.status}/></td>
+                                <td style={{textAlign:'center'}}>
+                                    {(() => {
+                                        const cur = l.status || 'pending';
+                                        // Color-code the status pill so the shop floor can scan at a glance
+                                        const colors = {
+                                            pending:   {bg:'rgba(148,163,184,0.15)', fg:'#64748b', border:'#94a3b8'},
+                                            ordered:   {bg:'rgba(59,130,246,0.15)',  fg:'#2563eb', border:'#3b82f6'},
+                                            received:  {bg:'rgba(6,182,212,0.15)',   fg:'#0891b2', border:'#06b6d4'},
+                                            installed: {bg:'rgba(234,179,8,0.15)',   fg:'#a16207', border:'#eab308'},
+                                            complete:  {bg:'rgba(77,184,106,0.15)',  fg:'#166534', border:'#4db86a'},
+                                        };
+                                        const c = colors[cur] || colors.pending;
+                                        if (ro.status === 'closed' || ro.status === 'delivered') {
+                                            // Locked once the RO is closed — just show the badge
+                                            return <Badge status={cur}/>;
+                                        }
+                                        return (
+                                            <select value={cur}
+                                                    onChange={e => updateLineStatus(l, e.target.value)}
+                                                    onClick={e => e.stopPropagation()}
+                                                    title="Change line status"
+                                                    style={{
+                                                        background: c.bg, color: c.fg,
+                                                        border: `1px solid ${c.border}`,
+                                                        borderRadius: 4, padding: '3px 6px',
+                                                        fontSize: 11, fontWeight: 600,
+                                                        textTransform: 'uppercase', cursor: 'pointer',
+                                                        appearance: 'auto'
+                                                    }}>
+                                                <option value="pending">Pending</option>
+                                                <option value="ordered">Ordered</option>
+                                                <option value="received">Received</option>
+                                                <option value="installed">Installed</option>
+                                                <option value="complete">Complete</option>
+                                            </select>
+                                        );
+                                    })()}
+                                </td>
                                 <td className="money" style={{fontWeight:600}}>{fmt(l.line_total)}</td>
                                 {ro.status !== 'closed' && ro.status !== 'delivered' && (
                                     <td style={{whiteSpace:'nowrap', textAlign:'right'}}>

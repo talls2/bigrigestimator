@@ -156,6 +156,7 @@ class RoLineUpdate(BaseModel):
     paint_rate: Optional[float] = None
     part_price: Optional[float] = None
     part_cost: Optional[float] = None
+    status: Optional[str] = None  # pending | ordered | received | installed | complete
     notes: Optional[str] = None
 
 
