@@ -559,3 +559,119 @@ def generate_work_order_pdf(ro, lines, shop=None):
     doc.build(story)
     buf.seek(0)
     return buf
+
+
+# ═════════════════════════════════════════════════════════════════
+# REPORT PDF (generic tabular report)
+# Used by Reports → Export PDF buttons. Any tabular report can be
+# rendered by passing a title, headers, and rows.
+# ═════════════════════════════════════════════════════════════════
+def generate_report_pdf(title, headers, rows, shop=None, subtitle=None,
+                         summary_stats=None, footer_note=None,
+                         col_widths=None, landscape_mode=False,
+                         align_right=None):
+    """
+    Render a tabular report as PDF.
+
+    - title: big header ("Production Summary", "AR Aging", etc.)
+    - headers: list of column header strings
+    - rows: list of lists (each inner list = one row, values pre-formatted)
+    - subtitle: small line under the title (e.g. date range, generated at)
+    - summary_stats: optional list of (label, value) pairs for a stat grid
+    - footer_note: small italic caption at the bottom
+    - align_right: iterable of column indices to right-align
+    """
+    from reportlab.lib.pagesizes import letter as _letter, landscape as _landscape
+
+    buf = io.BytesIO()
+    page_size = _landscape(_letter) if landscape_mode else _letter
+    doc = SimpleDocTemplate(buf, pagesize=page_size,
+                            leftMargin=0.5 * inch, rightMargin=0.5 * inch,
+                            topMargin=0.5 * inch, bottomMargin=0.5 * inch)
+    styles = getSampleStyleSheet()
+    story = []
+
+    generated = datetime.now().strftime("%B %d, %Y at %I:%M %p")
+    _build_header(story, styles, shop, "REPORT", title, generated)
+
+    if subtitle:
+        subtitle_style = ParagraphStyle("Subtitle", parent=styles["Normal"],
+                                         fontSize=10, textColor=colors.HexColor("#475569"),
+                                         spaceAfter=8)
+        story.append(Paragraph(subtitle, subtitle_style))
+        story.append(Spacer(1, 6))
+
+    # Summary stat grid (label + value pairs shown in a compact table)
+    if summary_stats:
+        stat_data = []
+        row_pair = []
+        for label, value in summary_stats:
+            row_pair.append(Paragraph(
+                f"<font size=8 color='#64748b'>{label}</font><br/>"
+                f"<font size=12 color='#0f172a'><b>{value}</b></font>",
+                styles["Normal"]
+            ))
+            if len(row_pair) == 4:
+                stat_data.append(row_pair)
+                row_pair = []
+        if row_pair:
+            while len(row_pair) < 4:
+                row_pair.append("")
+            stat_data.append(row_pair)
+        if stat_data:
+            page_w = doc.width
+            stat_col = page_w / 4
+            t = Table(stat_data, colWidths=[stat_col] * 4)
+            t.setStyle(TableStyle([
+                ("BOX", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#e2e8f0")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 10),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]))
+            story.append(t)
+            story.append(Spacer(1, 14))
+
+    # Main table
+    if headers and rows is not None:
+        table_data = [headers] + (rows if rows else [["(no data)"] + [""] * (len(headers) - 1)])
+
+        if col_widths is None:
+            page_w = doc.width
+            col_widths = [page_w / len(headers)] * len(headers)
+
+        t = Table(table_data, colWidths=col_widths, repeatRows=1)
+        style_cmds = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a5c2a")),
+            ("TEXTCOLOR",  (0, 0), (-1, 0), colors.white),
+            ("FONTNAME",   (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE",   (0, 0), (-1, 0), 9),
+            ("FONTSIZE",   (0, 1), (-1, -1), 8.5),
+            ("VALIGN",     (0, 0), (-1, -1), "MIDDLE"),
+            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING",(0, 0), (-1, -1), 6),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1),
+                [colors.white, colors.HexColor("#f8fafc")]),
+            ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.HexColor("#164e22")),
+            ("GRID",      (0, 1), (-1, -1), 0.25, colors.HexColor("#e2e8f0")),
+        ]
+        if align_right:
+            for col in align_right:
+                style_cmds.append(("ALIGN", (col, 1), (col, -1), "RIGHT"))
+        t.setStyle(TableStyle(style_cmds))
+        story.append(t)
+
+    if footer_note:
+        story.append(Spacer(1, 12))
+        footer_style = ParagraphStyle("ReportFooter", parent=styles["Normal"],
+                                       fontSize=8, textColor=colors.HexColor("#94a3b8"),
+                                       alignment=TA_LEFT)
+        story.append(Paragraph(footer_note, footer_style))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf

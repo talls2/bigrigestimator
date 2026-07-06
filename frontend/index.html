@@ -3954,9 +3954,12 @@ function ReportsPage() {
     const [partsData, setPartsData] = useState([]);
     const [cycleData, setCycleData] = useState(null);
 
-    // Estimates export — date-range UI lives in the Exports tab.
+    // Date range used for Production report + Estimates CSV export.
     const today = new Date();
     const isoLocal = (d) => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const [prodFrom, setProdFrom] = useState('');
+    const [prodTo, setProdTo] = useState('');
+
     const [exportFrom, setExportFrom] = useState(isoLocal(new Date(today.getFullYear(), today.getMonth(), 1)));
     const [exportTo, setExportTo] = useState(isoLocal(today));
     const [exportStatus, setExportStatus] = useState('');
@@ -3983,13 +3986,43 @@ function ReportsPage() {
         return `${API}/exports/estimates-csv${q ? '?' + q : ''}`;
     };
 
+    // Same-origin path so downloads inherit auth cookies / just work in a new tab
+    const reportPdfUrl = (name, extraParams) => {
+        const p = new URLSearchParams(extraParams || {});
+        const q = p.toString();
+        return `${API}/reports/${name}/pdf${q ? '?' + q : ''}`;
+    };
+
+    const loadProduction = () => {
+        const p = new URLSearchParams();
+        if (prodFrom) p.set('start_date', prodFrom);
+        if (prodTo)   p.set('end_date',   prodTo);
+        const q = p.toString();
+        api(`/reports/production-summary${q ? '?' + q : ''}`).then(setProdData);
+    };
+
     useEffect(() => {
-        if (tab === 'production') api('/reports/production-summary').then(setProdData);
+        if (tab === 'production') loadProduction();
         if (tab === 'ar') api('/reports/ar-aging').then(setArData);
         if (tab === 'employees') api('/reports/employee-productivity').then(setEmpData);
         if (tab === 'parts') api('/reports/parts-summary').then(setPartsData);
         if (tab === 'cycle') api('/reports/cycle-time').then(setCycleData);
     }, [tab]);
+
+    // Reload Production when the user changes date filter
+    useEffect(() => {
+        if (tab === 'production') loadProduction();
+    }, [prodFrom, prodTo]);
+
+    // Small helper — right-aligned "Export PDF" link/button used in each tab
+    const PdfButton = ({name, params, label = 'Export PDF'}) => (
+        <a href={reportPdfUrl(name, params)}
+           target="_blank" rel="noopener noreferrer"
+           className="btn btn-outline btn-sm"
+           style={{marginLeft:8}}>
+            <i className="fas fa-file-pdf" style={{color:'#dc2626'}}></i> {label}
+        </a>
+    );
 
     return (
         <div>
@@ -4000,64 +4033,177 @@ function ReportsPage() {
                 ))}
             </div>
 
-            {tab === 'production' && prodData && (
-                <div className="stats-grid">
-                    <div className="stat-card"><div className="label">Active ROs</div><div className="value blue">{prodData.active_ros}</div></div>
-                    <div className="stat-card"><div className="label">Completed ROs</div><div className="value green">{prodData.completed_ros}</div></div>
-                    <div className="stat-card"><div className="label">Total Billed</div><div className="value money">{fmt(prodData.total_billed)}</div></div>
-                    <div className="stat-card"><div className="label">Collected</div><div className="value green money">{fmt(prodData.total_collected)}</div></div>
-                    <div className="stat-card"><div className="label">Outstanding</div><div className="value red money">{fmt(prodData.total_outstanding)}</div></div>
-                    <div className="stat-card"><div className="label">Total Labor</div><div className="value money">{fmt(prodData.total_labor)}</div></div>
-                    <div className="stat-card"><div className="label">Total Parts</div><div className="value money">{fmt(prodData.total_parts)}</div></div>
-                    <div className="stat-card"><div className="label">Total Paint</div><div className="value money">{fmt(prodData.total_paint)}</div></div>
+            {tab === 'production' && (
+                <div>
+                    <div className="card" style={{padding:14, marginBottom:16, display:'flex', alignItems:'flex-end', gap:12, flexWrap:'wrap'}}>
+                        <div className="form-group" style={{marginBottom:0, flex:'0 0 160px'}}>
+                            <label>From</label>
+                            <input type="date" value={prodFrom} onChange={e => setProdFrom(e.target.value)} />
+                        </div>
+                        <div className="form-group" style={{marginBottom:0, flex:'0 0 160px'}}>
+                            <label>To</label>
+                            <input type="date" value={prodTo} onChange={e => setProdTo(e.target.value)} />
+                        </div>
+                        <button className="btn btn-outline btn-sm" onClick={() => { setProdFrom(''); setProdTo(''); }}>
+                            Clear
+                        </button>
+                        <div style={{flex:1}}></div>
+                        <PdfButton name="production-summary"
+                                   params={{...(prodFrom && {start_date: prodFrom}), ...(prodTo && {end_date: prodTo})}} />
+                    </div>
+                    {!prodData && (
+                        <div className="card"><div className="text-muted" style={{textAlign:'center', padding:32}}>Loading…</div></div>
+                    )}
+                    {prodData && (
+                        <div className="stats-grid">
+                            <div className="stat-card"><div className="label">Active ROs</div><div className="value blue">{prodData.active_ros || 0}</div></div>
+                            <div className="stat-card"><div className="label">Completed ROs</div><div className="value green">{prodData.completed_ros || 0}</div></div>
+                            <div className="stat-card"><div className="label">Total Billed</div><div className="value money">{fmt(prodData.total_billed)}</div></div>
+                            <div className="stat-card"><div className="label">Collected</div><div className="value green money">{fmt(prodData.total_collected)}</div></div>
+                            <div className="stat-card"><div className="label">Outstanding</div><div className="value red money">{fmt(prodData.total_outstanding)}</div></div>
+                            <div className="stat-card"><div className="label">Total Labor</div><div className="value money">{fmt(prodData.total_labor)}</div></div>
+                            <div className="stat-card"><div className="label">Total Parts</div><div className="value money">{fmt(prodData.total_parts)}</div></div>
+                            <div className="stat-card"><div className="label">Total Paint</div><div className="value money">{fmt(prodData.total_paint)}</div></div>
+                        </div>
+                    )}
+                    {prodData && (prodData.repair_orders_by_status || []).length > 0 && (
+                        <div className="card" style={{marginTop:16}}>
+                            <div className="card-header"><h3>Breakdown by Status</h3></div>
+                            <div className="table-wrapper">
+                                <table>
+                                    <thead><tr><th>Status</th><th>Count</th><th>Total Billed</th><th>Paid</th><th>Balance</th></tr></thead>
+                                    <tbody>
+                                        {prodData.repair_orders_by_status.map((r, i) => (
+                                            <tr key={i}>
+                                                <td><Badge status={r.status}/></td>
+                                                <td>{r.count}</td>
+                                                <td className="money">{fmt(r.total_amount)}</td>
+                                                <td className="money text-green">{fmt(r.amount_paid)}</td>
+                                                <td className="money text-red">{fmt(r.balance_due)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
             {tab === 'ar' && (
-                <div className="card"><div className="table-wrapper">
-                    <table><thead><tr><th>RO #</th><th>Customer</th><th>Insurance</th><th>Total</th><th>Paid</th><th>Balance</th><th>Days Old</th></tr></thead>
-                    <tbody>{arData.map(r => (
-                        <tr key={r.ro_number}>
-                            <td style={{color:'var(--primary)'}}>{r.ro_number}</td><td>{custName(r)}</td><td>{r.insurance_name||'—'}</td>
-                            <td className="money">{fmt(r.total_amount)}</td><td className="money text-green">{fmt(r.amount_paid)}</td>
-                            <td className="money text-red" style={{fontWeight:600}}>{fmt(r.balance_due)}</td>
-                            <td style={{color: r.days_old > 60 ? 'var(--red)' : r.days_old > 30 ? 'var(--yellow)' : 'var(--text)'}}>{Math.round(r.days_old||0)}</td>
-                        </tr>
-                    ))}</tbody></table>
-                </div></div>
+                <div>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12}}>
+                        <div className="text-sm text-muted">
+                            {arData.length} open invoice{arData.length === 1 ? '' : 's'}
+                            {arData.length > 0 && ' — '}
+                            {arData.length > 0 && <b className="text-red">{fmt(arData.reduce((s, r) => s + Number(r.balance_due || 0), 0))} outstanding</b>}
+                        </div>
+                        <PdfButton name="ar-aging" />
+                    </div>
+                    <div className="card"><div className="table-wrapper">
+                        <table><thead><tr><th>RO #</th><th>Customer</th><th>Insurance</th><th>Total</th><th>Paid</th><th>Balance</th><th>Days Old</th></tr></thead>
+                        <tbody>
+                            {!arData.length && (
+                                <tr><td colSpan="7" className="text-muted" style={{textAlign:'center', padding:32}}>
+                                    <i className="fas fa-check-circle" style={{color:'var(--primary)', fontSize:22, display:'block', marginBottom:6}}></i>
+                                    No outstanding balances — everyone's paid up.
+                                </td></tr>
+                            )}
+                            {arData.map(r => (
+                                <tr key={r.ro_number}>
+                                    <td style={{color:'var(--primary)'}}>{r.ro_number}</td>
+                                    <td>{custName(r)}</td>
+                                    <td>{r.insurance_name||'—'}</td>
+                                    <td className="money">{fmt(r.total_amount)}</td>
+                                    <td className="money text-green">{fmt(r.amount_paid)}</td>
+                                    <td className="money text-red" style={{fontWeight:600}}>{fmt(r.balance_due)}</td>
+                                    <td style={{fontWeight:600, color: r.days_old > 60 ? 'var(--danger)' : r.days_old > 30 ? '#eab308' : 'var(--text)'}}>
+                                        {Math.round(r.days_old||0)}d
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody></table>
+                    </div></div>
+                </div>
             )}
 
             {tab === 'employees' && (
-                <div className="card"><div className="table-wrapper">
-                    <table><thead><tr><th>Code</th><th>Name</th><th>Role</th><th>Total Hours</th><th>ROs Worked</th></tr></thead>
-                    <tbody>{empData.map(e => (
-                        <tr key={e.id}><td>{e.employee_code}</td><td>{e.first_name} {e.last_name}</td><td><Badge status={e.role}/></td>
-                        <td>{e.total_hours}</td><td>{e.ros_worked}</td></tr>
-                    ))}</tbody></table>
-                </div></div>
+                <div>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12}}>
+                        <div className="text-sm text-muted">
+                            {empData.length} active employee{empData.length === 1 ? '' : 's'}
+                        </div>
+                        <PdfButton name="employee-productivity" />
+                    </div>
+                    <div className="card"><div className="table-wrapper">
+                        <table><thead><tr><th>Code</th><th>Name</th><th>Role</th><th>Total Hours</th><th>ROs Worked</th></tr></thead>
+                        <tbody>
+                            {!empData.length && (
+                                <tr><td colSpan="5" className="text-muted" style={{textAlign:'center', padding:32}}>No employee data yet.</td></tr>
+                            )}
+                            {empData.map(e => (
+                                <tr key={e.id}>
+                                    <td>{e.employee_code}</td>
+                                    <td>{e.first_name} {e.last_name}</td>
+                                    <td><Badge status={e.role}/></td>
+                                    <td>{Number(e.total_hours || 0).toFixed(2)}</td>
+                                    <td>{e.ros_worked || 0}</td>
+                                </tr>
+                            ))}
+                        </tbody></table>
+                    </div></div>
+                </div>
             )}
 
             {tab === 'parts' && (
-                <div className="card"><div className="table-wrapper">
-                    <table><thead><tr><th>Part #</th><th>Description</th><th>Type</th><th>Qty</th><th>Price</th><th>Cost</th><th>Profit</th></tr></thead>
-                    <tbody>{partsData.map((p,i) => (
-                        <tr key={i}><td>{p.part_number}</td><td>{p.description}</td><td><Badge status={p.part_type}/></td>
-                        <td>{p.total_qty}</td><td className="money">{fmt(p.total_price)}</td><td className="money">{fmt(p.total_cost)}</td>
-                        <td className="money text-green">{fmt(p.profit)}</td></tr>
-                    ))}</tbody></table>
-                </div></div>
-            )}
-
-            {tab === 'cycle' && cycleData && (
-                <div className="stats-grid">
-                    <div className="stat-card"><div className="label">Completed ROs</div><div className="value blue">{cycleData.total_completed || 0}</div></div>
-                    <div className="stat-card"><div className="label">Avg Days to Complete</div><div className="value">{cycleData.avg_days_to_complete != null ? `${cycleData.avg_days_to_complete} days` : '—'}</div></div>
-                    <div className="stat-card"><div className="label">Fastest</div><div className="value green">{cycleData.min_days != null ? `${Math.round(cycleData.min_days)} days` : '—'}</div></div>
-                    <div className="stat-card"><div className="label">Slowest</div><div className="value yellow">{cycleData.max_days != null ? `${Math.round(cycleData.max_days)} days` : '—'}</div></div>
+                <div>
+                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12}}>
+                        <div className="text-sm text-muted">
+                            {partsData.length} distinct part line{partsData.length === 1 ? '' : 's'}
+                        </div>
+                        <PdfButton name="parts-summary" />
+                    </div>
+                    <div className="card"><div className="table-wrapper">
+                        <table><thead><tr><th>Part #</th><th>Description</th><th>Type</th><th>Qty</th><th>Price</th><th>Cost</th><th>Profit</th></tr></thead>
+                        <tbody>
+                            {!partsData.length && (
+                                <tr><td colSpan="7" className="text-muted" style={{textAlign:'center', padding:32}}>No parts billed on any repair order yet.</td></tr>
+                            )}
+                            {partsData.map((p,i) => (
+                                <tr key={i}>
+                                    <td>{p.part_number}</td>
+                                    <td>{p.description}</td>
+                                    <td><Badge status={p.part_type}/></td>
+                                    <td>{Number(p.total_qty || 0).toFixed(0)}</td>
+                                    <td className="money">{fmt(p.total_price)}</td>
+                                    <td className="money">{fmt(p.total_cost)}</td>
+                                    <td className="money text-green">{fmt(p.profit)}</td>
+                                </tr>
+                            ))}
+                        </tbody></table>
+                    </div></div>
                 </div>
             )}
-            {tab === 'cycle' && cycleData && !cycleData.total_completed && (
-                <div className="card"><div className="text-muted" style={{textAlign:'center',padding:32}}>No completed repair orders yet. Cycle time stats will appear here once ROs are marked complete.</div></div>
+
+            {tab === 'cycle' && (
+                <div>
+                    <div style={{display:'flex', justifyContent:'flex-end', marginBottom:12}}>
+                        <PdfButton name="cycle-time" />
+                    </div>
+                    {cycleData && cycleData.total_completed > 0 && (
+                        <div className="stats-grid">
+                            <div className="stat-card"><div className="label">Completed ROs</div><div className="value blue">{cycleData.total_completed || 0}</div></div>
+                            <div className="stat-card"><div className="label">Avg Days to Complete</div><div className="value">{cycleData.avg_days_to_complete != null ? `${cycleData.avg_days_to_complete} days` : '—'}</div></div>
+                            <div className="stat-card"><div className="label">Fastest</div><div className="value green">{cycleData.min_days != null ? `${Number(cycleData.min_days).toFixed(1)} days` : '—'}</div></div>
+                            <div className="stat-card"><div className="label">Slowest</div><div className="value yellow">{cycleData.max_days != null ? `${Number(cycleData.max_days).toFixed(1)} days` : '—'}</div></div>
+                        </div>
+                    )}
+                    {cycleData && !cycleData.total_completed && (
+                        <div className="card"><div className="text-muted" style={{textAlign:'center', padding:32}}>
+                            No completed repair orders yet. Cycle time stats will appear here once ROs are marked complete.
+                        </div></div>
+                    )}
+                </div>
             )}
 
             {tab === 'exports' && (
